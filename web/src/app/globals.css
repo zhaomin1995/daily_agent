@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Override Tailwind's dark variant to use class-based instead of media query,
+   so the manual dark mode toggle works alongside system preference. */
+@custom-variant dark (&:is(.dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -12,15 +16,63 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Fallback: apply dark colors when system prefers dark AND no explicit class override */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light-override) {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+}
+
+/* When .dark class is set explicitly by the toggle */
+:root.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* iOS safe area padding for fixed bars */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Toast slide-up animation */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
+/* Confirm dialog scale-in animation */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
 }

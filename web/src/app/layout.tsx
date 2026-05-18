@@ -1,7 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import MobileHeader from "@/components/MobileHeader";
+import LoadingBar from "@/components/LoadingBar";
+import { ToastProvider } from "@/components/Toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,6 +19,19 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Daily Agent",
   description: "Automation tools dashboard",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Daily Agent",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
@@ -27,17 +43,16 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col md:flex-row">
-        {/* Mobile top header — hidden on desktop where sidebar shows the title */}
-        <header className="md:hidden sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90 px-4 py-3">
-          <h1 className="text-base font-semibold tracking-tight">Daily Agent</h1>
-        </header>
-
-        <Sidebar />
-
-        {/* Main content: bottom padding on mobile to clear the tab bar */}
-        <main className="flex-1 overflow-auto pb-16 md:pb-0">{children}</main>
+        <ToastProvider>
+          <LoadingBar />
+          <MobileHeader />
+          <Sidebar />
+          {/* Bottom padding on mobile clears the fixed tab bar */}
+          <main className="flex-1 overflow-auto pb-16 md:pb-0">{children}</main>
+        </ToastProvider>
       </body>
     </html>
   );

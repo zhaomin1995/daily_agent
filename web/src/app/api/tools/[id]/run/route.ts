@@ -5,6 +5,8 @@ import { REPO_DIR } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
+/* Runs a tool script and streams stdout/stderr back as Server-Sent Events.
+   Event types: "stdout", "stderr", "done" (with exit code). */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -17,40 +19,46 @@ export async function POST(
   }
 
   const scriptPath = path.join(REPO_DIR, tool.script);
+  const encoder = new TextEncoder();
 
-  return new Promise<Response>((resolve) => {
-    const proc = spawn("/bin/zsh", [scriptPath], {
-      env: { ...process.env, HOME: process.env.HOME },
-    });
+  const stream = new ReadableStream({
+    start(controller) {
+      const proc = spawn("/bin/zsh", [scriptPath], {
+        env: { ...process.env, HOME: process.env.HOME },
+      });
 
-    let stdout = "";
-    let stderr = "";
+      // Stream stdout chunks as SSE events
+      proc.stdout.on("data", (data) => {
+        const event = `data: ${JSON.stringify({ type: "stdout", text: data.toString() })}\n\n`;
+        controller.enqueue(encoder.encode(event));
+      });
 
-    proc.stdout.on("data", (data) => {
-      stdout += data.toString();
-    });
+      // Stream stderr chunks as SSE events
+      proc.stderr.on("data", (data) => {
+        const event = `data: ${JSON.stringify({ type: "stderr", text: data.toString() })}\n\n`;
+        controller.enqueue(encoder.encode(event));
+      });
 
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
+      // Send final event with exit code and close the stream
+      proc.on("close", (code) => {
+        const event = `data: ${JSON.stringify({ type: "done", exitCode: code })}\n\n`;
+        controller.enqueue(encoder.encode(event));
+        controller.close();
+      });
 
-    proc.on("close", (code) => {
-      resolve(
-        Response.json({
-          exitCode: code,
-          stdout: stdout.slice(-5000),
-          stderr: stderr.slice(-2000),
-        })
-      );
-    });
+      proc.on("error", (err) => {
+        const event = `data: ${JSON.stringify({ type: "error", text: err.message })}\n\n`;
+        controller.enqueue(encoder.encode(event));
+        controller.close();
+      });
+    },
+  });
 
-    proc.on("error", (err) => {
-      resolve(
-        Response.json(
-          { error: `Failed to start: ${err.message}` },
-          { status: 500 }
-        )
-      );
-    });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
   });
 }

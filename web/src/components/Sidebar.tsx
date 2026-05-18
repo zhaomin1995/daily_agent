@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import DarkModeToggle from "./DarkModeToggle";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: "grid" },
@@ -27,7 +28,13 @@ const icons: Record<string, React.ReactNode> = {
   ),
 };
 
-/* Desktop: vertical sidebar on the left. Mobile: fixed bottom tab bar. */
+/* Returns the display name for the current route */
+function getPageTitle(pathname: string): string {
+  const match = nav.find((item) => item.href === pathname);
+  return match?.label || "Daily Agent";
+}
+
+/* Desktop: vertical sidebar on the left. Mobile: fixed bottom tab bar + top header. */
 export default function Sidebar() {
   const pathname = usePathname();
 
@@ -58,10 +65,14 @@ export default function Sidebar() {
             );
           })}
         </nav>
+        {/* Dark mode toggle at the bottom of the sidebar */}
+        <div className="px-3 py-3 border-t border-zinc-200 dark:border-zinc-800">
+          <DarkModeToggle />
+        </div>
       </aside>
 
       {/* Mobile bottom tab bar — hidden on desktop */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90 safe-area-bottom">
         <div className="flex justify-around items-center h-14">
           {nav.map((item) => {
             const active = pathname === item.href;
@@ -85,3 +96,6 @@ export default function Sidebar() {
     </>
   );
 }
+
+/* Exported for use in the mobile header in layout.tsx */
+export { getPageTitle };
