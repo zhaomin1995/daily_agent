@@ -2,11 +2,12 @@ import { spawn } from "child_process";
 import path from "path";
 import { tools } from "@/lib/tools";
 import { REPO_DIR } from "@/lib/paths";
+import { register, unregister, kill } from "@/lib/processRegistry";
 
 export const dynamic = "force-dynamic";
 
-/* Runs a tool script and streams stdout/stderr back as Server-Sent Events.
-   Event types: "stdout", "stderr", "done" (with exit code). */
+/* POST: Runs a tool script and streams stdout/stderr back as Server-Sent Events.
+   Event types: "stdout", "stderr", "done" (with exit code), "cancelled". */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -27,26 +28,30 @@ export async function POST(
         env: { ...process.env, HOME: process.env.HOME },
       });
 
-      // Stream stdout chunks as SSE events
+      // Track the process so it can be cancelled via DELETE
+      register(id, proc);
+
       proc.stdout.on("data", (data) => {
         const event = `data: ${JSON.stringify({ type: "stdout", text: data.toString() })}\n\n`;
         controller.enqueue(encoder.encode(event));
       });
 
-      // Stream stderr chunks as SSE events
       proc.stderr.on("data", (data) => {
         const event = `data: ${JSON.stringify({ type: "stderr", text: data.toString() })}\n\n`;
         controller.enqueue(encoder.encode(event));
       });
 
-      // Send final event with exit code and close the stream
-      proc.on("close", (code) => {
-        const event = `data: ${JSON.stringify({ type: "done", exitCode: code })}\n\n`;
+      proc.on("close", (code, signal) => {
+        unregister(id);
+        // SIGTERM means the user cancelled via the Stop button
+        const type = signal === "SIGTERM" ? "cancelled" : "done";
+        const event = `data: ${JSON.stringify({ type, exitCode: code })}\n\n`;
         controller.enqueue(encoder.encode(event));
         controller.close();
       });
 
       proc.on("error", (err) => {
+        unregister(id);
         const event = `data: ${JSON.stringify({ type: "error", text: err.message })}\n\n`;
         controller.enqueue(encoder.encode(event));
         controller.close();
@@ -61,4 +66,17 @@ export async function POST(
       Connection: "keep-alive",
     },
   });
+}
+
+/* DELETE: Cancels a running tool by killing its process. */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const killed = kill(id);
+  if (killed) {
+    return Response.json({ cancelled: true });
+  }
+  return Response.json({ cancelled: false, message: "No running process found" });
 }

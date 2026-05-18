@@ -5,10 +5,9 @@ import { useEffect, useState } from "react";
 type Theme = "system" | "light" | "dark";
 
 /* Cycles through system → light → dark. Persists choice in localStorage. */
-export default function DarkModeToggle() {
+export default function DarkModeToggle({ collapsed = false }: { collapsed?: boolean }) {
   const [theme, setTheme] = useState<Theme>("system");
 
-  // On mount, read stored preference
   useEffect(() => {
     const stored = localStorage.getItem("theme") as Theme | null;
     if (stored) {
@@ -24,7 +23,6 @@ export default function DarkModeToggle() {
     } else if (t === "light") {
       root.classList.remove("dark");
     } else {
-      // System: follow prefers-color-scheme
       const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       if (prefersDark) {
         root.classList.add("dark");
@@ -69,11 +67,14 @@ export default function DarkModeToggle() {
   return (
     <button
       onClick={cycle}
-      className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-500 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800/60 transition-colors"
+      className={`flex items-center gap-2 rounded-lg text-sm text-zinc-500 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800/60 transition-colors ${
+        collapsed ? "p-2 justify-center" : "px-3 py-2"
+      }`}
       title={`Theme: ${labels[theme]}`}
     >
       {icons[theme]}
-      <span className="hidden md:inline text-xs">{labels[theme]}</span>
+      {/* Hide label when sidebar is collapsed or on mobile */}
+      {!collapsed && <span className="hidden md:inline text-xs">{labels[theme]}</span>}
     </button>
   );
 }

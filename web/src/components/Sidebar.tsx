@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import DarkModeToggle from "./DarkModeToggle";
 
 const nav = [
@@ -28,46 +29,95 @@ const icons: Record<string, React.ReactNode> = {
   ),
 };
 
+/* Collapse/expand chevron icon */
+function CollapseIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={`transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}
+    >
+      <polyline points="11 17 6 12 11 7" />
+      <polyline points="18 17 13 12 18 7" />
+    </svg>
+  );
+}
+
 /* Returns the display name for the current route */
 function getPageTitle(pathname: string): string {
   const match = nav.find((item) => item.href === pathname);
   return match?.label || "Daily Agent";
 }
 
-/* Desktop: vertical sidebar on the left. Mobile: fixed bottom tab bar + top header. */
+/* Desktop: collapsible vertical sidebar. Mobile: fixed bottom tab bar. */
 export default function Sidebar() {
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Restore collapsed state from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem("sidebar-collapsed");
+    if (stored === "true") setCollapsed(true);
+  }, []);
+
+  function toggleCollapse() {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem("sidebar-collapsed", String(next));
+  }
 
   return (
     <>
       {/* Desktop sidebar — hidden on mobile */}
-      <aside className="hidden md:flex w-56 shrink-0 border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 flex-col">
-        <div className="px-5 py-5 border-b border-zinc-200 dark:border-zinc-800">
-          <h1 className="text-lg font-semibold tracking-tight">Daily Agent</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">Automation Dashboard</p>
+      <aside
+        className={`hidden md:flex shrink-0 border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 flex-col transition-all duration-200 ${
+          collapsed ? "w-16" : "w-56"
+        }`}
+      >
+        {/* Header */}
+        <div className={`border-b border-zinc-200 dark:border-zinc-800 flex items-center ${collapsed ? "px-3 py-4 justify-center" : "px-5 py-5 justify-between"}`}>
+          {!collapsed && (
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight">Daily Agent</h1>
+              <p className="text-xs text-zinc-500 mt-0.5">Automation Dashboard</p>
+            </div>
+          )}
+          <button
+            onClick={toggleCollapse}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1 rounded-md hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60"
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <CollapseIcon collapsed={collapsed} />
+          </button>
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1">
+
+        {/* Navigation links */}
+        <nav className={`flex-1 py-4 space-y-1 ${collapsed ? "px-2" : "px-3"}`}>
           {nav.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                title={collapsed ? item.label : undefined}
+                className={`flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  collapsed ? "justify-center px-2" : "px-3"
+                } ${
                   active
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                     : "text-zinc-600 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
                 }`}
               >
                 {icons[item.icon]}
-                {item.label}
+                {!collapsed && <span>{item.label}</span>}
               </Link>
             );
           })}
         </nav>
-        {/* Dark mode toggle at the bottom of the sidebar */}
-        <div className="px-3 py-3 border-t border-zinc-200 dark:border-zinc-800">
-          <DarkModeToggle />
+
+        {/* Footer: dark mode toggle */}
+        <div className={`py-3 border-t border-zinc-200 dark:border-zinc-800 ${collapsed ? "px-2 flex justify-center" : "px-3"}`}>
+          <DarkModeToggle collapsed={collapsed} />
         </div>
       </aside>
 
@@ -97,5 +147,4 @@ export default function Sidebar() {
   );
 }
 
-/* Exported for use in the mobile header in layout.tsx */
 export { getPageTitle };
