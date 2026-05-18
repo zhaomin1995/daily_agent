@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import ConfirmDialog from "./ConfirmDialog";
+import OutputModal from "./OutputModal";
+import QuickActions from "./QuickActions";
 import { useToast } from "./Toast";
 
 interface ToolCardProps {
   id: string;
   name: string;
   description: string;
+  script: string;
   category: string;
   status: "ready" | "needs-setup";
   lastRun: string | null;
@@ -28,31 +31,53 @@ function formatRelativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export default function ToolCard({ id, name, description, category, status, lastRun, index }: ToolCardProps) {
+/* Formats elapsed seconds into mm:ss */
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+export default function ToolCard({ id, name, description, script, category, status, lastRun, index }: ToolCardProps) {
   const [running, setRunning] = useState(false);
   const [stdout, setStdout] = useState("");
   const [stderr, setStderr] = useState("");
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [showOutput, setShowOutput] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const outputRef = useRef<HTMLPreElement>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
 
-  // Staggered entrance animation: each card fades in with a delay based on its index
+  // Staggered entrance animation
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), index * 80);
     return () => clearTimeout(timer);
   }, [index]);
 
-  // Auto-scroll output to bottom as new content arrives
+  // Auto-scroll stdout output to bottom
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [stdout]);
 
-  /* Streams the tool's stdout/stderr via SSE from the run API */
+  // Elapsed time counter while running
+  useEffect(() => {
+    if (running) {
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [running]);
+
   async function handleRun() {
     setConfirmOpen(false);
     setRunning(true);
@@ -110,7 +135,6 @@ export default function ToolCard({ id, name, description, category, status, last
     }
   }
 
-  /* Sends a kill signal to the running process */
   async function handleCancel() {
     try {
       await fetch(`/api/tools/${id}/run`, { method: "DELETE" });
@@ -126,7 +150,6 @@ export default function ToolCard({ id, name, description, category, status, last
           visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
         }`}
       >
-        {/* Header: badges + run/cancel button */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -149,25 +172,29 @@ export default function ToolCard({ id, name, description, category, status, last
               Last run: {lastRun ? formatRelativeTime(lastRun) : "Never"}
             </p>
           </div>
-          {/* Run or Stop button */}
-          {running ? (
-            <button
-              onClick={handleCancel}
-              className="w-full sm:w-auto shrink-0 px-4 py-2.5 sm:py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="1" />
-              </svg>
-              Stop
-            </button>
-          ) : (
-            <button
-              onClick={() => setConfirmOpen(true)}
-              className="w-full sm:w-auto shrink-0 px-4 py-2.5 sm:py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 transition-colors active:scale-95"
-            >
-              Run
-            </button>
-          )}
+
+          {/* Right side: quick actions + run/stop button */}
+          <div className="flex items-center gap-2 sm:flex-col-reverse sm:items-end">
+            <QuickActions toolId={id} scriptPath={script} lastRun={lastRun} />
+            {running ? (
+              <button
+                onClick={handleCancel}
+                className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="6" width="12" height="12" rx="1" />
+                </svg>
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={() => setConfirmOpen(true)}
+                className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 transition-colors active:scale-95"
+              >
+                Run
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Streaming output — collapsible */}
@@ -181,18 +208,31 @@ export default function ToolCard({ id, name, description, category, status, last
                   <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                 )}
                 <span className="text-xs font-medium text-zinc-500">
-                  {exitCode !== null ? `Exit code: ${exitCode}` : "Running..."}
+                  {exitCode !== null ? `Exit code: ${exitCode}` : `Running... ${formatElapsed(elapsed)}`}
                 </span>
               </div>
-              <button
-                onClick={() => setShowOutput(false)}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1"
-                title="Dismiss output"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1">
+                {/* Fullscreen toggle */}
+                <button
+                  onClick={() => setFullscreen(true)}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1"
+                  title="Fullscreen output"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+                  </svg>
+                </button>
+                {/* Dismiss */}
+                <button
+                  onClick={() => setShowOutput(false)}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1"
+                  title="Dismiss output"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
             </div>
             {stdout && (
               <pre
@@ -218,6 +258,15 @@ export default function ToolCard({ id, name, description, category, status, last
         confirmLabel="Run"
         onConfirm={handleRun}
         onCancel={() => setConfirmOpen(false)}
+      />
+
+      <OutputModal
+        open={fullscreen}
+        title={`${name} — Output`}
+        stdout={stdout}
+        stderr={stderr}
+        exitCode={exitCode}
+        onClose={() => setFullscreen(false)}
       />
     </>
   );
