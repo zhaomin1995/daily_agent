@@ -14,10 +14,10 @@ interface ToolCardProps {
   category: string;
   status: "ready" | "needs-setup";
   lastRun: string | null;
+  schedule: string | null;
   index: number;
 }
 
-/* Formats an ISO timestamp into a human-readable relative time string */
 function formatRelativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -31,14 +31,16 @@ function formatRelativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-/* Formats elapsed seconds into mm:ss */
 function formatElapsed(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-export default function ToolCard({ id, name, description, script, category, status, lastRun, index }: ToolCardProps) {
+// Description line clamp threshold (characters)
+const DESC_CLAMP = 120;
+
+export default function ToolCard({ id, name, description, script, category, status, lastRun, schedule, index }: ToolCardProps) {
   const [running, setRunning] = useState(false);
   const [stdout, setStdout] = useState("");
   const [stderr, setStderr] = useState("");
@@ -48,24 +50,27 @@ export default function ToolCard({ id, name, description, script, category, stat
   const [fullscreen, setFullscreen] = useState(false);
   const [visible, setVisible] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [descExpanded, setDescExpanded] = useState(false);
   const outputRef = useRef<HTMLPreElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
 
-  // Staggered entrance animation
+  const isLongDesc = description.length > DESC_CLAMP;
+  const displayDesc = isLongDesc && !descExpanded
+    ? description.slice(0, DESC_CLAMP).trimEnd() + "..."
+    : description;
+
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), index * 80);
     return () => clearTimeout(timer);
   }, [index]);
 
-  // Auto-scroll stdout output to bottom
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [stdout]);
 
-  // Elapsed time counter while running
   useEffect(() => {
     if (running) {
       setElapsed(0);
@@ -91,14 +96,12 @@ export default function ToolCard({ id, name, description, script, category, stat
       const res = await fetch(`/api/tools/${id}/run`, { method: "POST" });
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
-
       if (!reader) throw new Error("No response stream");
 
       let buffer = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n\n");
         buffer = lines.pop() || "";
@@ -107,17 +110,11 @@ export default function ToolCard({ id, name, description, script, category, stat
           const match = line.match(/^data: (.+)$/m);
           if (!match) continue;
           const event = JSON.parse(match[1]);
-
-          if (event.type === "stdout") {
-            setStdout((prev) => prev + event.text);
-          } else if (event.type === "stderr") {
-            setStderr((prev) => prev + event.text);
-          } else if (event.type === "done") {
+          if (event.type === "stdout") setStdout((prev) => prev + event.text);
+          else if (event.type === "stderr") setStderr((prev) => prev + event.text);
+          else if (event.type === "done") {
             setExitCode(event.exitCode);
-            toast(
-              event.exitCode === 0 ? `${name} completed successfully` : `${name} failed (exit ${event.exitCode})`,
-              event.exitCode === 0 ? "success" : "error"
-            );
+            toast(event.exitCode === 0 ? `${name} completed successfully` : `${name} failed (exit ${event.exitCode})`, event.exitCode === 0 ? "success" : "error");
           } else if (event.type === "cancelled") {
             setExitCode(event.exitCode);
             toast(`${name} was cancelled`, "info");
@@ -150,54 +147,73 @@ export default function ToolCard({ id, name, description, script, category, stat
           visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
         }`}
       >
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                {category}
-              </span>
-              <span
-                className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                  status === "ready"
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                    : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                }`}
-              >
-                {status === "ready" ? "Ready" : "Needs Setup"}
-              </span>
-            </div>
-            <h3 className="text-base font-semibold mt-2">{name}</h3>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">{description}</p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-2">
-              Last run: {lastRun ? formatRelativeTime(lastRun) : "Never"}
-            </p>
+        {/* Top row: badges + quick actions (on same line) */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+              {category}
+            </span>
+            <span
+              className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                status === "ready"
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+              }`}
+            >
+              {status === "ready" ? "Ready" : "Needs Setup"}
+            </span>
           </div>
-
-          {/* Right side: quick actions + run/stop button */}
-          <div className="flex items-center gap-2 sm:flex-col-reverse sm:items-end">
-            <QuickActions toolId={id} scriptPath={script} lastRun={lastRun} />
-            {running ? (
-              <button
-                onClick={handleCancel}
-                className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="6" y="6" width="12" height="12" rx="1" />
-                </svg>
-                Stop
-              </button>
-            ) : (
-              <button
-                onClick={() => setConfirmOpen(true)}
-                className="flex-1 sm:flex-none px-4 py-2.5 sm:py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 transition-colors active:scale-95"
-              >
-                Run
-              </button>
-            )}
-          </div>
+          <QuickActions toolId={id} scriptPath={script} lastRun={lastRun} />
         </div>
 
-        {/* Streaming output — collapsible */}
+        {/* Title + description + meta */}
+        <h3 className="text-base font-semibold">{name}</h3>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+          {displayDesc}
+          {isLongDesc && (
+            <button
+              onClick={() => setDescExpanded(!descExpanded)}
+              className="ml-1 text-zinc-900 dark:text-zinc-200 font-medium hover:underline"
+            >
+              {descExpanded ? "Show less" : "Show more"}
+            </button>
+          )}
+        </p>
+
+        {/* Meta row: last run + schedule + run button */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
+            <span>Last run: {lastRun ? formatRelativeTime(lastRun) : "Never"}</span>
+            {schedule && (
+              <span className="flex items-center gap-1">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                </svg>
+                {schedule}
+              </span>
+            )}
+          </div>
+          {running ? (
+            <button
+              onClick={handleCancel}
+              className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="1" />
+              </svg>
+              Stop
+            </button>
+          ) : (
+            <button
+              onClick={() => setConfirmOpen(true)}
+              className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 transition-colors active:scale-95"
+            >
+              Run
+            </button>
+          )}
+        </div>
+
+        {/* Streaming output */}
         {showOutput && (stdout || stderr || exitCode !== null) && (
           <div className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-4 animate-expand">
             <div className="flex items-center justify-between mb-2">
@@ -212,22 +228,12 @@ export default function ToolCard({ id, name, description, script, category, stat
                 </span>
               </div>
               <div className="flex items-center gap-1">
-                {/* Fullscreen toggle */}
-                <button
-                  onClick={() => setFullscreen(true)}
-                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1"
-                  title="Fullscreen output"
-                >
+                <button onClick={() => setFullscreen(true)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1" title="Fullscreen">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
                   </svg>
                 </button>
-                {/* Dismiss */}
-                <button
-                  onClick={() => setShowOutput(false)}
-                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1"
-                  title="Dismiss output"
-                >
+                <button onClick={() => setShowOutput(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1" title="Dismiss">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -235,10 +241,7 @@ export default function ToolCard({ id, name, description, script, category, stat
               </div>
             </div>
             {stdout && (
-              <pre
-                ref={outputRef}
-                className="text-xs bg-zinc-50 dark:bg-zinc-950 rounded-lg p-3 overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap break-words"
-              >
+              <pre ref={outputRef} className="text-xs bg-zinc-50 dark:bg-zinc-950 rounded-lg p-3 overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap break-words">
                 {stdout}
               </pre>
             )}
@@ -251,23 +254,8 @@ export default function ToolCard({ id, name, description, script, category, stat
         )}
       </div>
 
-      <ConfirmDialog
-        open={confirmOpen}
-        title={`Run ${name}?`}
-        message="This will execute the tool script. Output will stream below the card."
-        confirmLabel="Run"
-        onConfirm={handleRun}
-        onCancel={() => setConfirmOpen(false)}
-      />
-
-      <OutputModal
-        open={fullscreen}
-        title={`${name} — Output`}
-        stdout={stdout}
-        stderr={stderr}
-        exitCode={exitCode}
-        onClose={() => setFullscreen(false)}
-      />
+      <ConfirmDialog open={confirmOpen} title={`Run ${name}?`} message="This will execute the tool script. Output will stream below the card." confirmLabel="Run" onConfirm={handleRun} onCancel={() => setConfirmOpen(false)} />
+      <OutputModal open={fullscreen} title={`${name} — Output`} stdout={stdout} stderr={stderr} exitCode={exitCode} onClose={() => setFullscreen(false)} />
     </>
   );
 }
