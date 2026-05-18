@@ -25,9 +25,9 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <div className="p-8 max-w-4xl">
-      <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-      <p className="text-sm text-zinc-500 mt-1 mb-8">
+    <div className="p-4 sm:p-8 max-w-4xl">
+      <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
+      <p className="text-sm text-zinc-500 mt-1 mb-6 sm:mb-8">
         All automation tools in one place.
       </p>
 

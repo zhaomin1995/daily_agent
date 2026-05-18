@@ -28,9 +28,16 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex">
+      <body className="min-h-full flex flex-col md:flex-row">
+        {/* Mobile top header — hidden on desktop where sidebar shows the title */}
+        <header className="md:hidden sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90 px-4 py-3">
+          <h1 className="text-base font-semibold tracking-tight">Daily Agent</h1>
+        </header>
+
         <Sidebar />
-        <main className="flex-1 overflow-auto">{children}</main>
+
+        {/* Main content: bottom padding on mobile to clear the tab bar */}
+        <main className="flex-1 overflow-auto pb-16 md:pb-0">{children}</main>
       </body>
     </html>
   );

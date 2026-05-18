@@ -29,10 +29,11 @@ export default function ToolCard({ id, name, description, category, status }: To
   }
 
   return (
-    <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 bg-white dark:bg-zinc-900">
-      <div className="flex items-start justify-between gap-4">
+    <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 sm:p-5 bg-white dark:bg-zinc-900">
+      {/* Header: badges + run button. Stacks vertically on mobile. */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
               {category}
             </span>
@@ -49,15 +50,17 @@ export default function ToolCard({ id, name, description, category, status }: To
           <h3 className="text-base font-semibold mt-2">{name}</h3>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">{description}</p>
         </div>
+        {/* Full-width button on mobile, fixed-width on desktop */}
         <button
           onClick={handleRun}
           disabled={running}
-          className="shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 transition-colors"
+          className="w-full sm:w-auto shrink-0 px-4 py-2.5 sm:py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 transition-colors"
         >
           {running ? "Running..." : "Run"}
         </button>
       </div>
 
+      {/* Run output */}
       {result && (
         <div className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-4">
           <div className="flex items-center gap-2 mb-2">

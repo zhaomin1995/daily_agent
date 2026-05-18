@@ -45,17 +45,18 @@ export default function LogViewer() {
   }
 
   return (
-    <div className="flex gap-6 h-full">
-      <div className="w-48 shrink-0">
+    <div className="flex flex-col md:flex-row gap-4 md:gap-6 h-full">
+      {/* Date list: horizontal scroll on mobile, vertical sidebar on desktop */}
+      <div className="md:w-48 shrink-0">
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
           Briefings
         </h3>
-        <ul className="space-y-1">
+        <ul className="flex md:flex-col gap-1 overflow-x-auto pb-2 md:pb-0">
           {logs.map((log) => (
-            <li key={log.date}>
+            <li key={log.date} className="shrink-0">
               <button
                 onClick={() => loadLog(log.date)}
-                className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${
+                className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors whitespace-nowrap ${
                   selected === log.date
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                     : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
@@ -67,18 +68,20 @@ export default function LogViewer() {
           ))}
         </ul>
       </div>
+
+      {/* Content area */}
       <div className="flex-1 min-w-0">
         {selected ? (
           <div>
-            <h2 className="text-lg font-semibold mb-4">Briefing — {selected}</h2>
-            <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 overflow-auto max-h-[70vh]">
-              <pre className="text-sm whitespace-pre-wrap break-words font-mono leading-relaxed">
+            <h2 className="text-base md:text-lg font-semibold mb-4">Briefing — {selected}</h2>
+            <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 md:p-6 overflow-auto max-h-[60vh] md:max-h-[70vh]">
+              <pre className="text-xs md:text-sm whitespace-pre-wrap break-words font-mono leading-relaxed">
                 {content || "Loading..."}
               </pre>
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
+          <div className="flex items-center justify-center h-32 md:h-full text-zinc-400 text-sm">
             Select a briefing to view
           </div>
         )}
