@@ -75,11 +75,11 @@ export default function Sidebar() {
         }`}
       >
         {/* Header */}
-        <div className={`border-b border-zinc-200 dark:border-zinc-800 flex items-center ${collapsed ? "px-3 py-4 justify-center" : "px-5 py-5 justify-between"}`}>
+        <div className={`border-b border-zinc-200 dark:border-zinc-800 flex items-center ${collapsed ? "px-3 py-4 justify-center" : "px-5 py-6 justify-between"}`}>
           {!collapsed && (
             <div>
-              <h1 className="text-lg font-semibold tracking-tight">Daily Agent</h1>
-              <p className="text-xs text-zinc-500 mt-0.5">Automation Dashboard</p>
+              <h1 className="text-lg font-semibold tracking-tight leading-tight">Daily Agent</h1>
+              <p className="text-xs text-zinc-500 mt-1">Automation Dashboard</p>
             </div>
           )}
           <button
