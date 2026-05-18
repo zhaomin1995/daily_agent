@@ -4,7 +4,10 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import MobileHeader from "@/components/MobileHeader";
 import LoadingBar from "@/components/LoadingBar";
+import ScrollToTop from "@/components/ScrollToTop";
+import KeyboardShortcuts from "@/components/KeyboardShortcuts";
 import { ToastProvider } from "@/components/Toast";
+import { PreferencesProvider } from "@/components/PreferencesProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,13 +49,16 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col md:flex-row">
-        <ToastProvider>
-          <LoadingBar />
-          <MobileHeader />
-          <Sidebar />
-          {/* Bottom padding on mobile clears the fixed tab bar */}
-          <main className="flex-1 overflow-auto pb-16 md:pb-0">{children}</main>
-        </ToastProvider>
+        <PreferencesProvider>
+          <ToastProvider>
+            <LoadingBar />
+            <KeyboardShortcuts />
+            <ScrollToTop />
+            <MobileHeader />
+            <Sidebar />
+            <main className="flex-1 overflow-auto pb-16 md:pb-0">{children}</main>
+          </ToastProvider>
+        </PreferencesProvider>
       </body>
     </html>
   );

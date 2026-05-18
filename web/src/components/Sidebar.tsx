@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import DarkModeToggle from "./DarkModeToggle";
+import StatusIndicator from "./StatusIndicator";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: "grid" },
@@ -115,8 +116,9 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* Footer: dark mode toggle */}
-        <div className={`py-3 border-t border-zinc-200 dark:border-zinc-800 ${collapsed ? "px-2 flex justify-center" : "px-3"}`}>
+        {/* Footer: status + dark mode toggle */}
+        <div className={`py-3 border-t border-zinc-200 dark:border-zinc-800 space-y-2 ${collapsed ? "px-2" : "px-3"}`}>
+          <StatusIndicator collapsed={collapsed} />
           <DarkModeToggle collapsed={collapsed} />
         </div>
       </aside>

@@ -108,3 +108,84 @@ body {
 .animate-expand {
   animation: expand 0.25s ease-out;
 }
+
+/* Accent color system — default zinc, overridden by PreferencesProvider */
+:root {
+  --accent-rgb: 24 24 27;
+}
+
+.bg-accent {
+  background-color: rgb(var(--accent-rgb));
+}
+
+.text-accent {
+  color: rgb(var(--accent-rgb));
+}
+
+.ring-accent {
+  --tw-ring-color: rgb(var(--accent-rgb) / 0.4);
+}
+
+/* High contrast mode */
+.high-contrast {
+  --foreground: #000000;
+  --background: #ffffff;
+}
+
+.high-contrast.dark {
+  --foreground: #ffffff;
+  --background: #000000;
+}
+
+.high-contrast .text-zinc-500,
+.high-contrast .text-zinc-400 {
+  color: var(--foreground) !important;
+  opacity: 0.75;
+}
+
+/* Focus visible outlines for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Page transition fade */
+main {
+  animation: page-fade 0.2s ease-out;
+}
+
+@keyframes page-fade {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+/* Success checkmark animation */
+@keyframes success-pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-success-pop {
+  animation: success-pop 0.4s ease-out;
+}
+
+@keyframes check-draw {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.animate-check-draw {
+  stroke-dasharray: 24;
+  animation: check-draw 0.4s ease-out 0.2s forwards;
+  stroke-dashoffset: 24;
+}
+
+/* Reduced motion: disable all animations for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

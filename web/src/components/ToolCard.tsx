@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import ConfirmDialog from "./ConfirmDialog";
 import OutputModal from "./OutputModal";
 import QuickActions from "./QuickActions";
+import RunSparkline from "./RunSparkline";
+import SuccessAnimation from "./SuccessAnimation";
 import { useToast } from "./Toast";
 
 interface ToolCardProps {
@@ -37,7 +40,6 @@ function formatElapsed(seconds: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-// Description line clamp threshold (characters)
 const DESC_CLAMP = 120;
 
 export default function ToolCard({ id, name, description, script, category, status, lastRun, schedule, index }: ToolCardProps) {
@@ -51,26 +53,31 @@ export default function ToolCard({ id, name, description, script, category, stat
   const [visible, setVisible] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [outputTab, setOutputTab] = useState<"stdout" | "stderr">("stdout");
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [cancelledId, setCancelledId] = useState<ReturnType<typeof setTimeout> | null>(null);
   const outputRef = useRef<HTMLPreElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
 
   const isLongDesc = description.length > DESC_CLAMP;
-  const displayDesc = isLongDesc && !descExpanded
-    ? description.slice(0, DESC_CLAMP).trimEnd() + "..."
-    : description;
+  const displayDesc = isLongDesc && !descExpanded ? description.slice(0, DESC_CLAMP).trimEnd() + "..." : description;
 
+  // Staggered entrance
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), index * 80);
     return () => clearTimeout(timer);
   }, [index]);
 
+  // Auto-scroll when enabled
   useEffect(() => {
-    if (outputRef.current) {
+    if (autoScroll && outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
-  }, [stdout]);
+  }, [stdout, stderr, autoScroll]);
 
+  // Elapsed timer
   useEffect(() => {
     if (running) {
       setElapsed(0);
@@ -78,18 +85,41 @@ export default function ToolCard({ id, name, description, script, category, stat
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [running]);
 
+  // Poll status on mount to detect if tool is already running
+  useEffect(() => {
+    fetch(`/api/tools/${id}/status`).then((r) => r.json()).then((d) => {
+      if (d.running) setRunning(true);
+    }).catch(() => {});
+  }, [id]);
+
+  function handleScrollOutput(e: React.UIEvent<HTMLPreElement>) {
+    const el = e.currentTarget;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    setAutoScroll(atBottom);
+  }
+
   async function handleRun() {
+    // Concurrent run guard
+    const statusRes = await fetch(`/api/tools/${id}/status`);
+    const statusData = await statusRes.json();
+    if (statusData.running) {
+      toast(`${name} is already running`, "error");
+      setConfirmOpen(false);
+      return;
+    }
+
     setConfirmOpen(false);
     setRunning(true);
     setStdout("");
     setStderr("");
     setExitCode(null);
     setShowOutput(true);
+    setAutoScroll(true);
+    setOutputTab("stdout");
+    setShowSuccess(false);
     toast(`Starting ${name}...`, "info");
 
     try {
@@ -110,16 +140,21 @@ export default function ToolCard({ id, name, description, script, category, stat
           const match = line.match(/^data: (.+)$/m);
           if (!match) continue;
           const event = JSON.parse(match[1]);
-          if (event.type === "stdout") setStdout((prev) => prev + event.text);
-          else if (event.type === "stderr") setStderr((prev) => prev + event.text);
+          if (event.type === "stdout") setStdout((p) => p + event.text);
+          else if (event.type === "stderr") setStderr((p) => p + event.text);
           else if (event.type === "done") {
             setExitCode(event.exitCode);
-            toast(event.exitCode === 0 ? `${name} completed successfully` : `${name} failed (exit ${event.exitCode})`, event.exitCode === 0 ? "success" : "error");
+            if (event.exitCode === 0) {
+              setShowSuccess(true);
+              toast(`${name} completed successfully`, "success");
+            } else {
+              toast(`${name} failed (exit ${event.exitCode})`, "error");
+            }
           } else if (event.type === "cancelled") {
             setExitCode(event.exitCode);
             toast(`${name} was cancelled`, "info");
           } else if (event.type === "error") {
-            setStderr((prev) => prev + event.text);
+            setStderr((p) => p + event.text);
             toast(`${name} error: ${event.text}`, "error");
           }
         }
@@ -132,123 +167,149 @@ export default function ToolCard({ id, name, description, script, category, stat
     }
   }
 
-  async function handleCancel() {
-    try {
-      await fetch(`/api/tools/${id}/run`, { method: "DELETE" });
-    } catch {
-      toast("Failed to cancel", "error");
+  // Undo cancel: delays kill by 3 seconds, user can undo
+  function handleCancel() {
+    const tid = setTimeout(async () => {
+      setCancelledId(null);
+      try { await fetch(`/api/tools/${id}/run`, { method: "DELETE" }); }
+      catch { toast("Failed to cancel", "error"); }
+    }, 3000);
+    setCancelledId(tid);
+    toast("Cancelling in 3s... Click Undo to keep running", "info");
+  }
+
+  function handleUndoCancel() {
+    if (cancelledId) {
+      clearTimeout(cancelledId);
+      setCancelledId(null);
+      toast("Cancel undone — still running", "success");
     }
   }
 
+  function copyOutput() {
+    const text = outputTab === "stdout" ? stdout : stderr;
+    navigator.clipboard.writeText(text);
+    toast("Copied to clipboard", "success");
+  }
+
+  function downloadOutput() {
+    const text = outputTab === "stdout" ? stdout : stderr;
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${id}-${outputTab}-${new Date().toISOString().split("T")[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const activeOutput = outputTab === "stdout" ? stdout : stderr;
+
   return (
     <>
-      <div
-        className={`tool-card border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 sm:p-5 bg-white dark:bg-zinc-900 transition-all duration-300 ${
-          visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
-        }`}
-      >
-        {/* Top row: badges + quick actions (on same line) */}
+      <div className={`tool-card border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 sm:p-5 bg-white dark:bg-zinc-900 transition-all duration-300 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}`}>
+        {/* Top row: badges + quick actions */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-              {category}
-            </span>
-            <span
-              className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                status === "ready"
-                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-              }`}
-            >
-              {status === "ready" ? "Ready" : "Needs Setup"}
-            </span>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">{category}</span>
+            {status === "ready" ? (
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Ready</span>
+            ) : (
+              <Link href="/config" className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:ring-2 hover:ring-amber-300 transition-shadow cursor-pointer">
+                Needs Setup
+              </Link>
+            )}
           </div>
           <QuickActions toolId={id} scriptPath={script} lastRun={lastRun} />
         </div>
 
-        {/* Title + description + meta */}
         <h3 className="text-base font-semibold">{name}</h3>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
           {displayDesc}
           {isLongDesc && (
-            <button
-              onClick={() => setDescExpanded(!descExpanded)}
-              className="ml-1 text-zinc-900 dark:text-zinc-200 font-medium hover:underline"
-            >
+            <button onClick={() => setDescExpanded(!descExpanded)} className="ml-1 text-zinc-900 dark:text-zinc-200 font-medium hover:underline">
               {descExpanded ? "Show less" : "Show more"}
             </button>
           )}
         </p>
 
-        {/* Meta row: last run + schedule + run button */}
+        {/* Meta row */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-400 dark:text-zinc-500">
             <span>Last run: {lastRun ? formatRelativeTime(lastRun) : "Never"}</span>
             {schedule && (
               <span className="flex items-center gap-1">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                </svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
                 {schedule}
               </span>
             )}
+            <RunSparkline toolId={id} />
           </div>
-          {running ? (
-            <button
-              onClick={handleCancel}
-              className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="1" />
-              </svg>
-              Stop
-            </button>
-          ) : (
-            <button
-              onClick={() => setConfirmOpen(true)}
-              className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 transition-colors active:scale-95"
-            >
-              Run
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {cancelledId && (
+              <button onClick={handleUndoCancel} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors">
+                Undo
+              </button>
+            )}
+            {running ? (
+              <button onClick={handleCancel} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
+                Stop
+              </button>
+            ) : (
+              <button onClick={() => setConfirmOpen(true)} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:opacity-90 transition-opacity active:scale-95">
+                Run
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Streaming output */}
+        <SuccessAnimation show={showSuccess} />
+
+        {/* Output area with tabs */}
         {showOutput && (stdout || stderr || exitCode !== null) && (
           <div className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-4 animate-expand">
+            {/* Tab bar + controls */}
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                {exitCode !== null ? (
-                  <span className={`w-2 h-2 rounded-full ${exitCode === 0 ? "bg-emerald-500" : "bg-red-500"}`} />
-                ) : (
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                )}
-                <span className="text-xs font-medium text-zinc-500">
-                  {exitCode !== null ? `Exit code: ${exitCode}` : `Running... ${formatElapsed(elapsed)}`}
-                </span>
-              </div>
               <div className="flex items-center gap-1">
+                <button onClick={() => setOutputTab("stdout")} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${outputTab === "stdout" ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"}`}>
+                  stdout {stdout && <span className="ml-1 text-[10px] opacity-60">({stdout.split("\n").length}L)</span>}
+                </button>
+                <button onClick={() => setOutputTab("stderr")} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${outputTab === "stderr" ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"}`}>
+                  stderr {stderr && <span className="ml-1 text-[10px] opacity-60">({stderr.split("\n").length}L)</span>}
+                </button>
+                {exitCode !== null ? (
+                  <span className={`ml-2 text-xs font-medium ${exitCode === 0 ? "text-emerald-600" : "text-red-600"}`}>Exit: {exitCode}</span>
+                ) : (
+                  <span className="ml-2 text-xs text-zinc-400">{formatElapsed(elapsed)}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-0.5">
+                {!autoScroll && (
+                  <button onClick={() => setAutoScroll(true)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1 text-[10px] font-medium" title="Jump to bottom">
+                    ↓ Bottom
+                  </button>
+                )}
+                <button onClick={copyOutput} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1" title="Copy">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                </button>
+                <button onClick={downloadOutput} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1" title="Download">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                </button>
                 <button onClick={() => setFullscreen(true)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1" title="Fullscreen">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
-                  </svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
                 </button>
                 <button onClick={() => setShowOutput(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-1" title="Dismiss">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 </button>
               </div>
             </div>
-            {stdout && (
-              <pre ref={outputRef} className="text-xs bg-zinc-50 dark:bg-zinc-950 rounded-lg p-3 overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap break-words">
-                {stdout}
+            {activeOutput ? (
+              <pre ref={outputRef} onScroll={handleScrollOutput} className={`text-xs rounded-lg p-3 overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap break-words ${outputTab === "stderr" ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20" : "bg-zinc-50 dark:bg-zinc-950"}`}>
+                {activeOutput}
               </pre>
-            )}
-            {stderr && (
-              <pre className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 rounded-lg p-3 mt-2 overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap break-words">
-                {stderr}
-              </pre>
+            ) : (
+              <p className="text-xs text-zinc-400 text-center py-4">No {outputTab} output</p>
             )}
           </div>
         )}
