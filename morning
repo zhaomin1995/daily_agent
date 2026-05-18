@@ -1,0 +1,5 @@
+#!/bin/zsh
+TODAY=$(date +%Y-%m-%d)
+YESTERDAY=$(date -v-1d +%Y-%m-%d)
+PROMPT=$(sed "s/{{date}}/$TODAY/g; s/{{yesterday}}/$YESTERDAY/g" ~/.claude/morning-prompt.md)
+claude -p "$PROMPT"
