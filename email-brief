@@ -1,0 +1,6 @@
+#!/bin/zsh
+TODAY=$(date +%Y-%m-%d)
+YESTERDAY=$(date -v-1d +%Y-%m-%d)
+PROMPT=$(sed "s/{{date}}/$TODAY/g; s/{{yesterday}}/$YESTERDAY/g" ~/.claude/email-brief-prompt.md)
+claude -p "$PROMPT" --allowedTools "Bash,Read,Write" --model claude-sonnet-4-6
+osascript -e "display notification \"Email briefing ready. Check ~/morning-brief/$TODAY-email.md\" with title \"Email Debriefing\" sound name \"Glass\""

@@ -116,6 +116,35 @@ export default function Sidebar() {
           })}
         </nav>
 
+        {/* Quick links */}
+        <div className={`pb-2 border-t border-zinc-200 dark:border-zinc-800 pt-3 ${collapsed ? "px-2" : "px-3"}`}>
+          {!collapsed && (
+            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 px-1">
+              Quick Links
+            </p>
+          )}
+          <a
+            href="ticktick://"
+            title="TickTick"
+            className={`flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors text-zinc-600 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800/60 ${collapsed ? "justify-center px-2" : "px-3"}`}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            {!collapsed && <span>TickTick</span>}
+          </a>
+          <a
+            href="ms-outlook://"
+            title="Outlook"
+            className={`flex items-center gap-3 py-2 rounded-lg text-sm font-medium transition-colors text-zinc-600 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800/60 ${collapsed ? "justify-center px-2" : "px-3"}`}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2" /><polyline points="2 9 12 15 22 9" />
+            </svg>
+            {!collapsed && <span>Outlook</span>}
+          </a>
+        </div>
+
         {/* Footer: status + dark mode toggle */}
         <div className={`py-3 border-t border-zinc-200 dark:border-zinc-800 space-y-2 ${collapsed ? "px-2" : "px-3"}`}>
           <StatusIndicator collapsed={collapsed} />

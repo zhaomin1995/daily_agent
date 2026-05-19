@@ -1,5 +1,5 @@
 #!/bin/zsh
-TODAY=$(date +%Y-%m-%d)
-YESTERDAY=$(date -v-1d +%Y-%m-%d)
-PROMPT=$(sed "s/{{date}}/$TODAY/g; s/{{yesterday}}/$YESTERDAY/g" ~/.claude/morning-prompt.md)
-claude -p "$PROMPT"
+# Runs both tools in sequence for the scheduled 8AM weekday briefing
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+/bin/zsh "$REPO_DIR/email-brief"
+/bin/zsh "$REPO_DIR/workflow-brief"

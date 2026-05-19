@@ -9,6 +9,8 @@ export async function GET(
   { params }: { params: Promise<{ date: string }> }
 ) {
   const { date } = await params;
+
+  // Support YYYY-MM-DD, YYYY-MM-DD-email, YYYY-MM-DD-workflow, YYYY-MM-DD-action-prompts
   const filePath = path.join(BRIEFING_DIR, `${date}.md`);
 
   if (!fs.existsSync(filePath)) {

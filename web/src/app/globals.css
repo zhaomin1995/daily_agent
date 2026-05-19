@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* Override Tailwind's dark variant to use class-based instead of media query,
    so the manual dark mode toggle works alongside system preference. */

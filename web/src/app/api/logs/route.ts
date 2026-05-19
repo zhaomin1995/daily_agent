@@ -10,11 +10,12 @@ export async function GET() {
 
   const files = fs
     .readdirSync(BRIEFING_DIR)
-    .filter((f) => f.endsWith(".md"))
+    .filter((f) => f.endsWith("-email.md") || f.endsWith("-workflow.md"))
     .sort()
     .reverse()
     .map((f) => ({
-      date: f.replace(".md", ""),
+      date: f.replace("-email.md", "").replace("-workflow.md", ""),
+      type: f.endsWith("-email.md") ? "email" : "workflow",
       filename: f,
     }));
 
