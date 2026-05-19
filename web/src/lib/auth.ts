@@ -46,16 +46,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     // Block sign-in if the email is not on the allowlist
     async signIn({ user }) {
-      // Skip check for credentials provider (password-based)
+      // Always allow local password login
       if (user.email === "admin@localhost") return true;
 
-      // If no allowlist is set, allow everyone
-      if (allowedEmails.length === 0) return true;
+      // OAuth: only allow emails explicitly listed in AUTH_ALLOWED_EMAILS
+      if (allowedEmails.length === 0) return "/login?error=not-allowed";
 
       const email = (user.email || "").toLowerCase();
       if (allowedEmails.includes(email)) return true;
 
-      // Rejected — redirect to login with error
       return "/login?error=not-allowed";
     },
   },
