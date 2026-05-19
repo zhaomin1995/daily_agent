@@ -9,21 +9,36 @@ interface ActionItem {
   text: string;
   date: string;
   completed: boolean;
+  manual?: boolean;
 }
 
-function loadState(): Set<string> {
+interface ManualItem {
+  id: string;
+  text: string;
+  date: string;
+}
+
+interface State {
+  completed: string[];
+  manual: ManualItem[];
+}
+
+function loadState(): State {
   try {
     if (fs.existsSync(ACTION_ITEMS_STATE)) {
       const data = JSON.parse(fs.readFileSync(ACTION_ITEMS_STATE, "utf-8"));
-      return new Set(data.completed || []);
+      return {
+        completed: data.completed || [],
+        manual: data.manual || [],
+      };
     }
   } catch {}
-  return new Set();
+  return { completed: [], manual: [] };
 }
 
-function saveState(completed: Set<string>) {
+function saveState(state: State) {
   fs.mkdirSync(path.dirname(ACTION_ITEMS_STATE), { recursive: true });
-  fs.writeFileSync(ACTION_ITEMS_STATE, JSON.stringify({ completed: [...completed] }, null, 2));
+  fs.writeFileSync(ACTION_ITEMS_STATE, JSON.stringify(state, null, 2));
 }
 
 function extractItems(content: string, date: string): { id: string; text: string; date: string }[] {
@@ -47,37 +62,75 @@ function extractItems(content: string, date: string): { id: string; text: string
 }
 
 export async function GET() {
-  if (!fs.existsSync(BRIEFING_DIR)) return Response.json([]);
-
-  const completed = loadState();
-  const files = fs
-    .readdirSync(BRIEFING_DIR)
-    .filter((f) => f.endsWith("-workflow.md"))
-    .sort()
-    .reverse()
-    .slice(0, 7); // last 7 days
+  const state = loadState();
+  const completedSet = new Set(state.completed);
 
   const all: ActionItem[] = [];
-  for (const file of files) {
-    const date = file.replace("-workflow.md", "");
-    const content = fs.readFileSync(path.join(BRIEFING_DIR, file), "utf-8");
-    const items = extractItems(content, date);
-    for (const item of items) {
-      all.push({ ...item, completed: completed.has(item.id) });
+
+  // Items from last 7 workflow briefings
+  if (fs.existsSync(BRIEFING_DIR)) {
+    const files = fs
+      .readdirSync(BRIEFING_DIR)
+      .filter((f) => f.endsWith("-workflow.md"))
+      .sort()
+      .reverse()
+      .slice(0, 7);
+
+    for (const file of files) {
+      const date = file.replace("-workflow.md", "");
+      const content = fs.readFileSync(path.join(BRIEFING_DIR, file), "utf-8");
+      for (const item of extractItems(content, date)) {
+        all.push({ ...item, completed: completedSet.has(item.id) });
+      }
     }
+  }
+
+  // Manual items appended after briefing items
+  for (const m of state.manual) {
+    all.push({ ...m, completed: completedSet.has(m.id), manual: true });
   }
 
   return Response.json(all);
 }
 
+// Toggle single item, mark-all-done, or clear-completed
 export async function PUT(request: Request) {
-  const { id, completed } = await request.json();
+  const body = await request.json();
+  const state = loadState();
+  const completedSet = new Set(state.completed);
+
+  if (body.action === "mark-all-done") {
+    const ids: string[] = body.ids || [];
+    ids.forEach((id) => completedSet.add(id));
+    saveState({ ...state, completed: [...completedSet] });
+    return Response.json({ ok: true });
+  }
+
+  if (body.action === "clear-completed") {
+    // Remove from completed set and delete manual items that were completed
+    const newManual = state.manual.filter((m) => !completedSet.has(m.id));
+    saveState({ completed: [], manual: newManual });
+    return Response.json({ ok: true });
+  }
+
+  // Single toggle
+  const { id, completed } = body;
   if (!id) return Response.json({ error: "id required" }, { status: 400 });
+  if (completed) completedSet.add(id);
+  else completedSet.delete(id);
+  saveState({ ...state, completed: [...completedSet] });
+  return Response.json({ ok: true });
+}
+
+// Add a manual item
+export async function POST(request: Request) {
+  const { text } = await request.json();
+  if (!text?.trim()) return Response.json({ error: "text required" }, { status: 400 });
 
   const state = loadState();
-  if (completed) state.add(id);
-  else state.delete(id);
-  saveState(state);
-
-  return Response.json({ ok: true });
+  const id = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const date = new Date().toISOString().split("T")[0];
+  const newItem: ManualItem = { id, text: text.trim(), date };
+  saveState({ ...state, manual: [...state.manual, newItem] });
+  return Response.json({ id, text: newItem.text, date, completed: false, manual: true });
 }
