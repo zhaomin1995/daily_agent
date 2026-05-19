@@ -12,11 +12,10 @@ interface ActionItem {
 
 function formatDate(dateStr: string): string {
   const today = new Date().toISOString().split("T")[0];
-  const d = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
   if (dateStr === today) return "Today";
-  if (dateStr === d) return "Yesterday";
-  const parsed = new Date(dateStr + "T12:00:00");
-  return parsed.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  if (dateStr === yesterday) return "Yesterday";
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
 export default function ActionItemsPage() {
@@ -25,13 +24,21 @@ export default function ActionItemsPage() {
   const [filter, setFilter] = useState<"all" | "open" | "done">("open");
   const [newText, setNewText] = useState("");
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const editRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/action-items")
       .then((r) => r.json())
       .then((data) => { setItems(data); setLoading(false); });
   }, []);
+
+  // Focus edit input when edit mode opens
+  useEffect(() => {
+    if (editingId) editRef.current?.focus();
+  }, [editingId]);
 
   async function toggle(id: string, completed: boolean) {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, completed } : item));
@@ -44,7 +51,7 @@ export default function ActionItemsPage() {
 
   async function markAllDone() {
     const openIds = items.filter((i) => !i.completed).map((i) => i.id);
-    if (openIds.length === 0) return;
+    if (!openIds.length) return;
     setItems((prev) => prev.map((item) => ({ ...item, completed: true })));
     await fetch("/api/action-items", {
       method: "PUT",
@@ -76,6 +83,32 @@ export default function ActionItemsPage() {
     setItems((prev) => [...prev, item]);
     setAdding(false);
     inputRef.current?.focus();
+  }
+
+  function startEdit(item: ActionItem) {
+    setEditingId(item.id);
+    setEditText(item.text);
+  }
+
+  async function saveEdit(id: string) {
+    const text = editText.trim();
+    if (!text) { setEditingId(null); return; }
+    setItems((prev) => prev.map((item) => item.id === id ? { ...item, text } : item));
+    setEditingId(null);
+    await fetch("/api/action-items", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, text }),
+    });
+  }
+
+  async function deleteItem(id: string) {
+    setItems((prev) => prev.filter((item) => item.id !== id));
+    await fetch("/api/action-items", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
   }
 
   const filtered = items.filter((item) =>
@@ -113,7 +146,7 @@ export default function ActionItemsPage() {
         </div>
       )}
 
-      {/* Filter tabs */}
+      {/* Filter tabs + bulk actions */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="flex gap-1 border border-zinc-200 dark:border-zinc-800 rounded-lg p-1 w-fit">
           {(["open", "all", "done"] as const).map((f) => (
@@ -130,23 +163,15 @@ export default function ActionItemsPage() {
             </button>
           ))}
         </div>
-
-        {/* Bulk actions */}
         {!loading && (
           <div className="flex items-center gap-2 ml-auto">
             {openCount > 0 && (
-              <button
-                onClick={markAllDone}
-                className="text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              >
+              <button onClick={markAllDone} className="text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                 Mark all done
               </button>
             )}
             {doneCount > 0 && (
-              <button
-                onClick={clearCompleted}
-                className="text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              >
+              <button onClick={clearCompleted} className="text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
                 Clear completed
               </button>
             )}
@@ -154,7 +179,7 @@ export default function ActionItemsPage() {
         )}
       </div>
 
-      {/* Manual add */}
+      {/* Add item input */}
       <div className="flex gap-2 mb-6">
         <input
           ref={inputRef}
@@ -197,6 +222,7 @@ export default function ActionItemsPage() {
                       key={item.id}
                       className="flex items-start gap-3 group p-2.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
                     >
+                      {/* Checkbox */}
                       <button
                         onClick={() => toggle(item.id, !item.completed)}
                         className={`mt-0.5 shrink-0 w-4 h-4 rounded border transition-colors ${
@@ -211,13 +237,66 @@ export default function ActionItemsPage() {
                           </svg>
                         )}
                       </button>
-                      <span className={`flex-1 text-sm leading-relaxed ${item.completed ? "line-through text-zinc-400 dark:text-zinc-600" : "text-zinc-700 dark:text-zinc-300"}`}>
-                        {item.text}
-                      </span>
-                      {item.manual && (
-                        <span className="shrink-0 text-[10px] text-zinc-400 dark:text-zinc-600 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          manual
-                        </span>
+
+                      {/* Inline edit mode */}
+                      {editingId === item.id ? (
+                        <div className="flex-1 flex items-center gap-2 min-w-0">
+                          <input
+                            ref={editRef}
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveEdit(item.id);
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                            className="flex-1 text-sm px-2 py-0.5 border border-zinc-300 dark:border-zinc-600 rounded bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 ring-accent min-w-0"
+                          />
+                          <button
+                            onClick={() => saveEdit(item.id)}
+                            className="shrink-0 text-xs px-2 py-0.5 rounded bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-medium"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="shrink-0 text-xs text-zinc-400 hover:text-zinc-600"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Item text */}
+                          <span className={`flex-1 text-sm leading-relaxed ${item.completed ? "line-through text-zinc-400 dark:text-zinc-600" : "text-zinc-700 dark:text-zinc-300"}`}>
+                            {item.text}
+                          </span>
+
+                          {/* Hover action buttons */}
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button
+                              onClick={() => startEdit(item)}
+                              title="Edit"
+                              className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => deleteItem(item.id)}
+                              title="Delete"
+                              className="p-1 rounded text-zinc-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                <path d="M10 11v6M14 11v6" />
+                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                              </svg>
+                            </button>
+                          </div>
+                        </>
                       )}
                     </li>
                   ))}

@@ -20,6 +20,8 @@ interface ManualItem {
 
 interface State {
   completed: string[];
+  deleted: string[];
+  overrides: Record<string, string>;
   manual: ManualItem[];
 }
 
@@ -29,11 +31,13 @@ function loadState(): State {
       const data = JSON.parse(fs.readFileSync(ACTION_ITEMS_STATE, "utf-8"));
       return {
         completed: data.completed || [],
+        deleted: data.deleted || [],
+        overrides: data.overrides || {},
         manual: data.manual || [],
       };
     }
   } catch {}
-  return { completed: [], manual: [] };
+  return { completed: [], deleted: [], overrides: {}, manual: [] };
 }
 
 function saveState(state: State) {
@@ -64,10 +68,10 @@ function extractItems(content: string, date: string): { id: string; text: string
 export async function GET() {
   const state = loadState();
   const completedSet = new Set(state.completed);
+  const deletedSet = new Set(state.deleted);
 
   const all: ActionItem[] = [];
 
-  // Items from last 7 workflow briefings
   if (fs.existsSync(BRIEFING_DIR)) {
     const files = fs
       .readdirSync(BRIEFING_DIR)
@@ -80,20 +84,22 @@ export async function GET() {
       const date = file.replace("-workflow.md", "");
       const content = fs.readFileSync(path.join(BRIEFING_DIR, file), "utf-8");
       for (const item of extractItems(content, date)) {
-        all.push({ ...item, completed: completedSet.has(item.id) });
+        if (deletedSet.has(item.id)) continue;
+        const text = state.overrides[item.id] ?? item.text;
+        all.push({ ...item, text, completed: completedSet.has(item.id) });
       }
     }
   }
 
-  // Manual items appended after briefing items
   for (const m of state.manual) {
+    if (deletedSet.has(m.id)) continue;
     all.push({ ...m, completed: completedSet.has(m.id), manual: true });
   }
 
   return Response.json(all);
 }
 
-// Toggle single item, mark-all-done, or clear-completed
+// Toggle, mark-all-done, clear-completed
 export async function PUT(request: Request) {
   const body = await request.json();
   const state = loadState();
@@ -107,13 +113,11 @@ export async function PUT(request: Request) {
   }
 
   if (body.action === "clear-completed") {
-    // Remove from completed set and delete manual items that were completed
     const newManual = state.manual.filter((m) => !completedSet.has(m.id));
-    saveState({ completed: [], manual: newManual });
+    saveState({ ...state, completed: [], manual: newManual });
     return Response.json({ ok: true });
   }
 
-  // Single toggle
   const { id, completed } = body;
   if (!id) return Response.json({ error: "id required" }, { status: 400 });
   if (completed) completedSet.add(id);
@@ -133,4 +137,38 @@ export async function POST(request: Request) {
   const newItem: ManualItem = { id, text: text.trim(), date };
   saveState({ ...state, manual: [...state.manual, newItem] });
   return Response.json({ id, text: newItem.text, date, completed: false, manual: true });
+}
+
+// Edit item text
+export async function PATCH(request: Request) {
+  const { id, text } = await request.json();
+  if (!id || !text?.trim()) return Response.json({ error: "id and text required" }, { status: 400 });
+
+  const state = loadState();
+
+  if (id.startsWith("manual-")) {
+    const newManual = state.manual.map((m) => m.id === id ? { ...m, text: text.trim() } : m);
+    saveState({ ...state, manual: newManual });
+  } else {
+    saveState({ ...state, overrides: { ...state.overrides, [id]: text.trim() } });
+  }
+  return Response.json({ ok: true });
+}
+
+// Delete a single item
+export async function DELETE(request: Request) {
+  const { id } = await request.json();
+  if (!id) return Response.json({ error: "id required" }, { status: 400 });
+
+  const state = loadState();
+
+  if (id.startsWith("manual-")) {
+    const newManual = state.manual.filter((m) => m.id !== id);
+    saveState({ ...state, manual: newManual });
+  } else {
+    const deletedSet = new Set(state.deleted);
+    deletedSet.add(id);
+    saveState({ ...state, deleted: [...deletedSet] });
+  }
+  return Response.json({ ok: true });
 }
