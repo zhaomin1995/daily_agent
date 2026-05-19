@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
+  const searchParams = useSearchParams();
+  const notAllowed = searchParams.get("error") === "not-allowed";
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,6 +34,12 @@ export default function LoginPage() {
           <h1 className="text-xl font-bold">Daily Agent</h1>
           <p className="text-sm text-zinc-500 mt-1">Sign in to continue</p>
         </div>
+
+        {notAllowed && (
+          <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-xl px-4 py-3 mb-4 text-sm text-red-700 dark:text-red-400">
+            Your email is not on the allowed list. Contact the admin to request access.
+          </div>
+        )}
 
         <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6 space-y-4">
           {/* OAuth buttons — only rendered if providers are configured server-side */}
