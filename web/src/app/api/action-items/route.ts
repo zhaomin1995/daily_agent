@@ -5,13 +5,14 @@ import { BRIEFING_DIR, ACTION_ITEMS_STATE } from "@/lib/paths";
 export const dynamic = "force-dynamic";
 
 type Priority = "high" | "medium" | "low";
+type Source = "workflow" | "email-urgent" | "email-action" | "manual";
 
 interface ActionItem {
   id: string;
   text: string;
   date: string;
   completed: boolean;
-  manual?: boolean;
+  source: Source;
   priority?: Priority;
 }
 
@@ -50,8 +51,8 @@ function saveState(state: State) {
   fs.writeFileSync(ACTION_ITEMS_STATE, JSON.stringify(state, null, 2));
 }
 
-function extractItems(content: string, date: string): { id: string; text: string; date: string }[] {
-  const items: { id: string; text: string; date: string }[] = [];
+function extractWorkflowItems(content: string, date: string): { id: string; text: string; date: string; source: Source }[] {
+  const items: { id: string; text: string; date: string; source: Source }[] = [];
   const idx = content.indexOf("## Today's Priorities");
   if (idx === -1) return items;
   const after = content.slice(idx);
@@ -59,8 +60,40 @@ function extractItems(content: string, date: string): { id: string; text: string
   const section = end === -1 ? after : after.slice(0, end);
   section.split("\n").forEach((line, i) => {
     const m = line.match(/^\d+\.\s+(.+)/);
-    if (m) items.push({ id: `${date}-${i}`, text: m[1].replace(/\*\*/g, "").trim(), date });
+    if (m) items.push({ id: `${date}-${i}`, text: m[1].replace(/\*\*/g, "").trim(), date, source: "workflow" });
   });
+  return items;
+}
+
+// Extract Urgent and Action Needed items from email briefings.
+// Format: **Sender** (context) | Subject
+function extractEmailItems(content: string, date: string): { id: string; text: string; date: string; source: Source }[] {
+  const items: { id: string; text: string; date: string; source: Source }[] = [];
+  const sections: { heading: string; source: Source }[] = [
+    { heading: "### Urgent", source: "email-urgent" },
+    { heading: "### Action Needed", source: "email-action" },
+  ];
+
+  for (const { heading, source } of sections) {
+    const idx = content.indexOf(heading);
+    if (idx === -1) continue;
+    const after = content.slice(idx + heading.length);
+    const end = after.search(/\n###/);
+    const section = end === -1 ? after : after.slice(0, end);
+    if (section.includes("*(none)*")) continue;
+
+    let i = 0;
+    for (const line of section.split("\n")) {
+      // Match: **Sender Name** (optional context) | Subject
+      const m = line.match(/^\*\*(.+?)\*\*[^|]*\|\s*(.+)/);
+      if (m) {
+        const sender = m[1].trim();
+        const subject = m[2].trim();
+        items.push({ id: `${date}-${source}-${i}`, text: `${sender} — ${subject}`, date, source });
+        i++;
+      }
+    }
+  }
   return items;
 }
 
@@ -71,14 +104,25 @@ export async function GET() {
   const all: ActionItem[] = [];
 
   if (fs.existsSync(BRIEFING_DIR)) {
-    const files = fs
-      .readdirSync(BRIEFING_DIR)
-      .filter((f) => f.endsWith("-workflow.md"))
-      .sort().reverse().slice(0, 7);
-    for (const file of files) {
-      const date = file.replace("-workflow.md", "");
-      const content = fs.readFileSync(path.join(BRIEFING_DIR, file), "utf-8");
-      for (const item of extractItems(content, date)) {
+    const dates = [...new Set(
+      fs.readdirSync(BRIEFING_DIR)
+        .filter((f) => f.endsWith("-workflow.md") || f.endsWith("-email.md"))
+        .map((f) => f.replace(/-workflow\.md|-email\.md/, ""))
+    )].sort().reverse().slice(0, 7);
+
+    for (const date of dates) {
+      const workflowFile = path.join(BRIEFING_DIR, `${date}-workflow.md`);
+      const emailFile = path.join(BRIEFING_DIR, `${date}-email.md`);
+      const extracted: { id: string; text: string; date: string; source: Source }[] = [];
+
+      if (fs.existsSync(workflowFile)) {
+        extracted.push(...extractWorkflowItems(fs.readFileSync(workflowFile, "utf-8"), date));
+      }
+      if (fs.existsSync(emailFile)) {
+        extracted.push(...extractEmailItems(fs.readFileSync(emailFile, "utf-8"), date));
+      }
+
+      for (const item of extracted) {
         if (deletedSet.has(item.id)) continue;
         all.push({
           ...item,
@@ -92,7 +136,7 @@ export async function GET() {
 
   for (const m of state.manual) {
     if (deletedSet.has(m.id)) continue;
-    all.push({ ...m, completed: completedSet.has(m.id), manual: true, priority: state.priorities[m.id] });
+    all.push({ ...m, source: "manual" as Source, completed: completedSet.has(m.id), priority: state.priorities[m.id] });
   }
 
   return Response.json(all);
@@ -130,7 +174,7 @@ export async function POST(request: Request) {
   const id = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const date = new Date().toISOString().split("T")[0];
   saveState({ ...state, manual: [...state.manual, { id, text: text.trim(), date }] });
-  return Response.json({ id, text: text.trim(), date, completed: false, manual: true });
+  return Response.json({ id, text: text.trim(), date, completed: false, source: "manual" });
 }
 
 export async function PATCH(request: Request) {

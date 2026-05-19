@@ -207,6 +207,7 @@ interface ActionItem {
   text: string;
   date: string;
   completed: boolean;
+  source: string;
   priority?: string;
 }
 
@@ -218,7 +219,7 @@ function WorkflowPrioritiesView({ date }: { date: string }) {
     fetch("/api/action-items")
       .then((r) => r.json())
       .then((data: ActionItem[]) => {
-        setItems(data.filter((i) => i.date === date));
+        setItems(data.filter((i) => i.date === date && i.source === "workflow"));
         setLoading(false);
       });
   }, [date]);

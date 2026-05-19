@@ -3,15 +3,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type Priority = "high" | "medium" | "low";
+type Source = "workflow" | "email-urgent" | "email-action" | "manual";
 
 interface ActionItem {
   id: string;
   text: string;
   date: string;
   completed: boolean;
-  manual?: boolean;
+  source: Source;
   priority?: Priority;
 }
+
+const SOURCE_BADGE: Partial<Record<Source, { label: string; cls: string }>> = {
+  "email-urgent": { label: "Urgent", cls: "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" },
+  "email-action": { label: "Email", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400" },
+  "manual": { label: "manual", cls: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400" },
+};
 
 const PRIORITY_DOT: Record<Priority, string> = {
   high: "bg-red-500",
@@ -376,6 +383,12 @@ export default function ActionItemsPage() {
                           <span className={`flex-1 text-sm leading-relaxed ${item.completed ? "line-through text-zinc-400 dark:text-zinc-600" : "text-zinc-700 dark:text-zinc-300"}`}>
                             {item.text}
                           </span>
+                          {/* Source badge — always visible for email items, hover-only for manual */}
+                          {SOURCE_BADGE[item.source] && (
+                            <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${SOURCE_BADGE[item.source]!.cls} ${item.source === "manual" ? "opacity-0 group-hover:opacity-100 transition-opacity" : ""}`}>
+                              {SOURCE_BADGE[item.source]!.label}
+                            </span>
+                          )}
                           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                             <button onClick={() => { setEditingId(item.id); setEditText(item.text); }} title="Edit"
                               className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
