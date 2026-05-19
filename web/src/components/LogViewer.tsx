@@ -73,6 +73,7 @@ interface LogEntry {
   date: string;
   type: "email" | "workflow";
   filename: string;
+  badge?: number | null;
 }
 
 interface GroupedLogs {
@@ -376,16 +377,26 @@ export default function LogViewer() {
                 <li key={log.date} className="shrink-0">
                   <button
                     onClick={() => selectDate(log.date, log.email ? "email" : "workflow")}
-                    className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors whitespace-nowrap ${
+                    className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors whitespace-nowrap flex items-center justify-between gap-1.5 ${
                       selectedDate === log.date
                         ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                         : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
                     }`}
                   >
-                    <span>{log.date}</span>
-                    <span className="ml-2 text-xs opacity-60">
-                      {log.email && log.workflow ? "E+W" : log.email ? "E" : "W"}
-                    </span>
+                    <span className="truncate">{log.date}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-xs opacity-50">
+                        {log.email && log.workflow ? "E+W" : log.email ? "E" : "W"}
+                      </span>
+                      {(() => {
+                        const total = (log.email?.badge ?? 0) + (log.workflow?.badge ?? 0);
+                        return total > 0 ? (
+                          <span className={`inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[10px] font-bold rounded-full ${selectedDate === log.date ? "bg-white/25 text-white dark:bg-zinc-900/30 dark:text-zinc-900" : "bg-red-500 text-white"}`}>
+                            {total}
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
                   </button>
                 </li>
               ))}

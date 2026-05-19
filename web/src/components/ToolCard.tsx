@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import ConfirmDialog from "./ConfirmDialog";
 import OutputModal from "./OutputModal";
 import QuickActions from "./QuickActions";
 import RunSparkline from "./RunSparkline";
@@ -49,7 +48,6 @@ export default function ToolCard({ id, name, description, script, category, stat
   const [stderr, setStderr] = useState("");
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [showOutput, setShowOutput] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [visible, setVisible] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -108,11 +106,8 @@ export default function ToolCard({ id, name, description, script, category, stat
     const statusData = await statusRes.json();
     if (statusData.running) {
       toast(`${name} is already running`, "error");
-      setConfirmOpen(false);
       return;
     }
-
-    setConfirmOpen(false);
     setRunning(true);
     setStdout("");
     setStderr("");
@@ -263,7 +258,7 @@ export default function ToolCard({ id, name, description, script, category, stat
                 Stop
               </button>
             ) : (
-              <button onClick={() => setConfirmOpen(true)} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:opacity-90 transition-opacity active:scale-95">
+              <button onClick={handleRun} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:opacity-90 transition-opacity active:scale-95">
                 Run
               </button>
             )}
@@ -321,7 +316,6 @@ export default function ToolCard({ id, name, description, script, category, stat
         )}
       </div>
 
-      <ConfirmDialog open={confirmOpen} title={`Run ${name}?`} message="This will execute the tool script. Output will stream below the card." confirmLabel="Run" onConfirm={handleRun} onCancel={() => setConfirmOpen(false)} />
       <OutputModal open={fullscreen} title={`${name} — Output`} stdout={stdout} stderr={stderr} exitCode={exitCode} onClose={() => setFullscreen(false)} />
     </>
   );

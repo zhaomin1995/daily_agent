@@ -4,33 +4,40 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 interface ActionItem {
+  id: string;
   text: string;
+  date: string;
   completed: boolean;
-  source: string;
+  manual?: boolean;
 }
 
-/* Pinned section at the top of the dashboard showing uncompleted action items
-   carried over from the most recent briefing */
 export default function ActionItems() {
   const [items, setItems] = useState<ActionItem[]>([]);
-  const [date, setDate] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/briefing/actions")
+    fetch("/api/action-items")
       .then((r) => r.json())
-      .then((data) => {
-        setItems(data.items || []);
-        setDate(data.date);
+      .then((data: ActionItem[]) => {
+        setItems(data.filter((i) => !i.completed));
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
 
+  async function toggle(id: string) {
+    // Remove from widget immediately when checked
+    setItems((prev) => prev.filter((i) => i.id !== id));
+    await fetch("/api/action-items", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, completed: true }),
+    });
+  }
+
   if (loading || items.length === 0) return null;
 
-  // Show first 3 items by default, expand to show all
   const visible = expanded ? items : items.slice(0, 3);
   const hasMore = items.length > 3;
 
@@ -45,29 +52,30 @@ export default function ActionItems() {
             {items.length} action item{items.length !== 1 ? "s" : ""} pending
           </h3>
         </div>
-        {date && (
-          <Link
-            href="/logs"
-            className="text-xs text-amber-600 dark:text-amber-400 hover:underline"
-          >
-            From {date}
-          </Link>
-        )}
+        <Link href="/action-items" className="text-xs text-amber-600 dark:text-amber-400 hover:underline">
+          View all →
+        </Link>
       </div>
+
       <ul className="space-y-1.5">
-        {visible.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-300">
-            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400 dark:bg-amber-500 shrink-0" />
-            <span className="leading-relaxed">{item.text}</span>
+        {visible.map((item) => (
+          <li key={item.id} className="flex items-start gap-2.5 group">
+            <button
+              onClick={() => toggle(item.id)}
+              className="mt-0.5 shrink-0 w-4 h-4 rounded border border-amber-400/60 dark:border-amber-600/60 hover:bg-amber-200/50 dark:hover:bg-amber-800/40 flex items-center justify-center transition-colors"
+              title="Mark done"
+            />
+            <span className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed">{item.text}</span>
           </li>
         ))}
       </ul>
+
       {hasMore && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline"
+          className="mt-2.5 text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline"
         >
-          {expanded ? "Show less" : `Show ${items.length - 3} more`}
+          {expanded ? "Show less" : `+${items.length - 3} more`}
         </button>
       )}
     </div>
