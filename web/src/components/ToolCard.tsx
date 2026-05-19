@@ -18,6 +18,7 @@ interface ToolCardProps {
   status: "ready" | "needs-setup";
   lastRun: string | null;
   schedule: string | null;
+  badge: number | null;
   index: number;
 }
 
@@ -42,7 +43,7 @@ function formatElapsed(seconds: number): string {
 
 const DESC_CLAMP = 120;
 
-export default function ToolCard({ id, name, description, script, category, status, lastRun, schedule, index }: ToolCardProps) {
+export default function ToolCard({ id, name, description, script, category, status, lastRun, schedule, badge, index }: ToolCardProps) {
   const [running, setRunning] = useState(false);
   const [stdout, setStdout] = useState("");
   const [stderr, setStderr] = useState("");
@@ -218,6 +219,11 @@ export default function ToolCard({ id, name, description, script, category, stat
               <Link href="/config" className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:ring-2 hover:ring-amber-300 transition-shadow cursor-pointer">
                 Needs Setup
               </Link>
+            )}
+            {badge !== null && badge !== undefined && badge > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold rounded-full bg-red-500 text-white">
+                {badge > 99 ? "99+" : badge}
+              </span>
             )}
           </div>
           <QuickActions toolId={id} scriptPath={script} lastRun={lastRun} />

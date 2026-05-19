@@ -6,6 +6,7 @@ import SkeletonCard from "@/components/Skeleton";
 import PullToRefresh from "@/components/PullToRefresh";
 import ActionItems from "@/components/ActionItems";
 import StatsBar from "@/components/StatsBar";
+import SnapshotPanel from "@/components/SnapshotPanel";
 
 interface Tool {
   id: string;
@@ -16,6 +17,7 @@ interface Tool {
   status: "ready" | "needs-setup";
   lastRun: string | null;
   schedule: string | null;
+  badge: number | null;
 }
 
 function applySavedOrder(tools: Tool[]): Tool[] {
@@ -99,6 +101,7 @@ export default function Dashboard() {
           <StatsBar toolCount={tools.length} readyCount={readyCount} runningCount={0} briefingCount={briefingCount} lastRun={lastRun} />
         )}
 
+        <SnapshotPanel />
         <ActionItems />
 
         {!loading && tools.length > 0 && (
