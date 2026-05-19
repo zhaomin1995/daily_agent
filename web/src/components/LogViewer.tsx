@@ -201,13 +201,94 @@ function EmailDraftCards({ content }: { content: string }) {
   );
 }
 
+// Workflow priorities with live completion state, synced with the action items page
+interface ActionItem {
+  id: string;
+  text: string;
+  date: string;
+  completed: boolean;
+  priority?: string;
+}
+
+function WorkflowPrioritiesView({ date }: { date: string }) {
+  const [items, setItems] = useState<ActionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/action-items")
+      .then((r) => r.json())
+      .then((data: ActionItem[]) => {
+        setItems(data.filter((i) => i.date === date));
+        setLoading(false);
+      });
+  }, [date]);
+
+  async function toggle(id: string, completed: boolean) {
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, completed } : i));
+    await fetch("/api/action-items", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, completed }),
+    });
+  }
+
+  if (loading) return <p className="text-sm text-zinc-400 py-4">Loading priorities...</p>;
+  if (items.length === 0) return (
+    <p className="text-sm text-zinc-400 text-center py-8">No tracked priorities for this date.</p>
+  );
+
+  const doneCount = items.filter((i) => i.completed).length;
+  const pct = Math.round((doneCount / items.length) * 100);
+
+  return (
+    <div>
+      {/* Mini progress bar */}
+      <div className="flex items-center gap-3 mb-5">
+        <div className="flex-1 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-zinc-900 dark:bg-zinc-100 rounded-full transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="text-xs text-zinc-400 shrink-0">{doneCount}/{items.length} done</span>
+      </div>
+      <ul className="space-y-1">
+        {items.map((item) => (
+          <li
+            key={item.id}
+            className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
+          >
+            <button
+              onClick={() => toggle(item.id, !item.completed)}
+              className={`mt-0.5 shrink-0 w-4 h-4 rounded border transition-colors flex items-center justify-center ${
+                item.completed
+                  ? "bg-zinc-900 border-zinc-900 dark:bg-zinc-100 dark:border-zinc-100"
+                  : "border-zinc-300 dark:border-zinc-600 hover:border-zinc-500"
+              }`}
+            >
+              {item.completed && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="dark:stroke-zinc-900">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </button>
+            <span className={`text-sm leading-relaxed ${item.completed ? "line-through text-zinc-400 dark:text-zinc-600" : "text-zinc-700 dark:text-zinc-300"}`}>
+              {item.text}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function LogViewer() {
   const [logs, setLogs] = useState<GroupedLogs[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"email" | "workflow">("email");
   const [content, setContent] = useState<string>("");
   const [actionPrompts, setActionPrompts] = useState<string>("");
-  const [contentView, setContentView] = useState<"brief" | "prompts" | "drafts">("brief");
+  const [contentView, setContentView] = useState<"brief" | "prompts" | "drafts" | "priorities">("brief");
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
@@ -463,6 +544,19 @@ export default function LogViewer() {
                     Drafts
                   </button>
                 )}
+                {/* Priorities toggle — workflow only, syncs with action items page */}
+                {activeTab === "workflow" && selected?.workflow && (
+                  <button
+                    onClick={() => setContentView(contentView === "priorities" ? "brief" : "priorities")}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      contentView === "priorities"
+                        ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                        : "border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    Priorities
+                  </button>
+                )}
                 {/* Open in editor (#8) */}
                 <button
                   onClick={openInEditor}
@@ -479,12 +573,14 @@ export default function LogViewer() {
               </div>
             </div>
 
-            {/* Markdown / prompts / drafts content */}
+            {/* Markdown / prompts / drafts / priorities content */}
             <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 md:p-6 overflow-auto max-h-[60vh] md:max-h-[70vh]">
               {contentView === "prompts" ? (
                 <ActionPromptsView content={actionPrompts} />
               ) : contentView === "drafts" ? (
                 <EmailDraftCards content={content} />
+              ) : contentView === "priorities" && selectedDate ? (
+                <WorkflowPrioritiesView date={selectedDate} />
               ) : (
                 <ReactMarkdown components={markdownComponents}>
                   {content || "Loading..."}
