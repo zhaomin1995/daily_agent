@@ -34,6 +34,8 @@ export default function ChecklistTab({
   const [journalUrl, setJournalUrl] = useState("");
   const [fetching, setFetching] = useState(false);
   const [fetchResult, setFetchResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [showPaste, setShowPaste] = useState(false);
+  const [pastedText, setPastedText] = useState("");
 
   useEffect(() => { setReqs(requirements); }, [requirements]);
 
@@ -52,15 +54,15 @@ export default function ChecklistTab({
 
   useEffect(() => { fetchChecklist(); }, [fetchChecklist]);
 
-  async function fetchJournalRequirements() {
-    if (!journalUrl.trim()) return;
+  async function fetchJournalRequirements(usePaste = false) {
+    if (usePaste ? !pastedText.trim() : !journalUrl.trim()) return;
     setFetching(true);
     setFetchResult(null);
     try {
       const res = await fetch(`/api/submissions/${manuscriptId}/fetch-journal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: journalUrl.trim() }),
+        body: JSON.stringify(usePaste ? { text: pastedText.trim() } : { url: journalUrl.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Unknown error");
@@ -80,8 +82,13 @@ export default function ChecklistTab({
       setReqs(merged);
       onSave(merged);
       setFetchResult({ ok: true, message: `Requirements fetched${extracted.journal_name ? ` from ${extracted.journal_name}` : ""}` });
+      setShowPaste(false);
+      setPastedText("");
     } catch (e) {
-      setFetchResult({ ok: false, message: (e as Error).message });
+      const msg = (e as Error).message;
+      setFetchResult({ ok: false, message: msg });
+      // Suggest paste fallback on fetch errors
+      if (msg.includes("403") || msg.includes("fetch")) setShowPaste(true);
     }
     setFetching(false);
   }
@@ -114,12 +121,12 @@ export default function ChecklistTab({
             type="url"
             value={journalUrl}
             onChange={(e) => setJournalUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && fetchJournalRequirements()}
+            onKeyDown={(e) => { if (e.key === "Enter") fetchJournalRequirements(false); }}
             placeholder="https://www.journal.com/authors/guidelines"
             className="flex-1 px-3 py-1.5 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 ring-zinc-400 placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
           />
           <button
-            onClick={fetchJournalRequirements}
+            onClick={() => fetchJournalRequirements(false)}
             disabled={fetching || !journalUrl.trim()}
             className="px-4 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 transition-colors disabled:opacity-50 shrink-0"
           >
@@ -132,9 +139,44 @@ export default function ChecklistTab({
           </button>
         </div>
         {fetchResult && (
-          <p className={`mt-2 text-xs ${fetchResult.ok ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-            {fetchResult.ok ? "✓ " : "✗ "}{fetchResult.message}
-          </p>
+          <div className="mt-2">
+            <p className={`text-xs ${fetchResult.ok ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+              {fetchResult.ok ? "✓ " : "✗ "}{fetchResult.message}
+            </p>
+            {!fetchResult.ok && !showPaste && (
+              <button onClick={() => setShowPaste(true)} className="mt-1 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 underline underline-offset-2">
+                Site blocked automatic fetch — paste guidelines text instead
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Paste fallback */}
+        {showPaste && (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-zinc-500">
+              Open the journal guidelines page in your browser, select all text (⌘A), copy (⌘C), then paste below:
+            </p>
+            <textarea
+              value={pastedText}
+              onChange={(e) => setPastedText(e.target.value)}
+              placeholder="Paste the journal guidelines text here…"
+              rows={6}
+              className="w-full px-3 py-2 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 ring-zinc-400 resize-y placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => fetchJournalRequirements(true)}
+                disabled={fetching || !pastedText.trim()}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 transition-colors disabled:opacity-50"
+              >
+                {fetching ? "Extracting…" : "Extract Requirements"}
+              </button>
+              <button onClick={() => { setShowPaste(false); setPastedText(""); }} className="px-3 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
