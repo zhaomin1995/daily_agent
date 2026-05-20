@@ -1,7 +1,11 @@
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
+import { exec } from "child_process";
+import { promisify } from "util";
 import { SUBMISSIONS_DIR, COAUTHORS_FILE } from "@/lib/submissionPaths";
+
+const execAsync = promisify(exec);
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +26,29 @@ interface ManuscriptAuthor {
   contributions: string[];
 }
 
+interface SuggestedReviewer {
+  name: string;
+  email: string;
+  institution: string;
+  reason: string;
+}
+
 interface Manuscript {
   id: string;
   title: string;
   journal: string;
+  running_title?: string;
+  funding?: string;
+  irb_statement?: string;
+  data_availability?: string;
+  acknowledgments?: string;
+  conflicts_of_interest?: string;
+  word_count?: number;
+  abstract_word_count?: number;
+  keywords?: string[];
   authors: ManuscriptAuthor[];
+  suggested_reviewers?: SuggestedReviewer[];
+  excluded_reviewers?: string[];
   journal_requirements: { checklist_type: string | null };
   [key: string]: unknown;
 }
@@ -263,6 +285,127 @@ function generateChecklist(type: string | null) {
   return items.map((item) => ({ item, checked: false, note: "" }));
 }
 
+function generateTitlePage(ms: Manuscript, coauthors: Coauthor[]): string {
+  const orderedAuthors = [...(ms.authors || [])].sort((a, b) => a.order - b.order);
+  const superscripts = "¹²³⁴⁵⁶⁷⁸⁹";
+
+  const affiliations: string[] = [];
+  const authorAffMap = new Map<string, number[]>();
+  for (const a of orderedAuthors) {
+    const co = coauthors.find((c) => c.id === a.id);
+    if (!co) continue;
+    const aff = [co.department, co.institution].filter(Boolean).join(", ");
+    let idx = affiliations.indexOf(aff);
+    if (idx === -1) { affiliations.push(aff); idx = affiliations.length - 1; }
+    authorAffMap.set(a.id, [...(authorAffMap.get(a.id) || []), idx]);
+  }
+
+  const authorLine = orderedAuthors.map((a) => {
+    const co = coauthors.find((c) => c.id === a.id);
+    if (!co) return "";
+    const sups = (authorAffMap.get(a.id) || []).map((i) => superscripts[i] || `${i + 1}`).join("");
+    const creds = (co as unknown as Record<string, string>).credentials;
+    return `${co.name}${creds ? `, ${creds}` : ""}${sups}`;
+  }).filter(Boolean).join(", ");
+
+  const affLines = affiliations.map((aff, i) => `${superscripts[i] || i + 1} ${aff}`).join("\n");
+
+  const corresponding = orderedAuthors
+    .map((a) => coauthors.find((c) => c.id === a.id))
+    .find((c) => c?.role === "corresponding");
+
+  const parts: string[] = ["TITLE PAGE\n"];
+
+  parts.push(`Full Title:\n${ms.title || "[Title not set]"}\n`);
+  if (ms.running_title) parts.push(`Running Title:\n${ms.running_title}\n`);
+  parts.push(`Authors:\n${authorLine}\n`);
+  parts.push(`Affiliations:\n${affLines}\n`);
+
+  if (corresponding) {
+    const creds = (corresponding as unknown as Record<string, string>).credentials;
+    const corrBlock = [
+      `${corresponding.name}${creds ? `, ${creds}` : ""}`,
+      corresponding.department,
+      corresponding.institution,
+      `Email: ${corresponding.email}`,
+    ].filter(Boolean).join("\n");
+    parts.push(`Corresponding Author:\n${corrBlock}\n`);
+  }
+
+  const counts = [
+    ms.word_count != null ? `Word Count: ${ms.word_count.toLocaleString()} words` : null,
+    ms.abstract_word_count != null ? `Abstract Word Count: ${ms.abstract_word_count.toLocaleString()} words` : null,
+  ].filter(Boolean);
+  if (counts.length) parts.push(counts.join("\n") + "\n");
+
+  if (ms.keywords?.length) parts.push(`Keywords:\n${ms.keywords.join(", ")}\n`);
+  if (ms.funding) parts.push(`Funding:\n${ms.funding}\n`);
+  if (ms.conflicts_of_interest) parts.push(`Conflicts of Interest:\n${ms.conflicts_of_interest}\n`);
+  if (ms.irb_statement) parts.push(`Ethics Statement:\n${ms.irb_statement}\n`);
+  if (ms.data_availability) parts.push(`Data Availability:\n${ms.data_availability}\n`);
+  if (ms.acknowledgments) parts.push(`Acknowledgments:\n${ms.acknowledgments}\n`);
+
+  return parts.join("\n");
+}
+
+function generateSuggestedReviewers(ms: Manuscript): string {
+  const suggested = ms.suggested_reviewers || [];
+  const excluded = ms.excluded_reviewers || [];
+  if (!suggested.length && !excluded.length) return "No suggested or excluded reviewers have been added yet.";
+
+  const lines: string[] = [];
+  if (suggested.length) {
+    lines.push("SUGGESTED REVIEWERS\n");
+    suggested.forEach((r, i) => {
+      lines.push(`${i + 1}. ${r.name}`);
+      if (r.email) lines.push(`   Email: ${r.email}`);
+      if (r.institution) lines.push(`   Institution: ${r.institution}`);
+      if (r.reason) lines.push(`   Expertise: ${r.reason}`);
+      lines.push("");
+    });
+  }
+  if (excluded.length) {
+    lines.push("\nEXCLUDED REVIEWERS\n");
+    excluded.forEach((name, i) => lines.push(`${i + 1}. ${name}`));
+  }
+  return lines.join("\n");
+}
+
+async function generateReviewerResponse(ms: Manuscript, reviewerComments: string): Promise<string> {
+  const prompt = `You are helping an academic researcher write a response to peer reviewer comments for a journal submission.
+
+Manuscript title: "${ms.title || "the manuscript"}"
+Journal: ${ms.journal || "the journal"}
+
+REVIEWER COMMENTS RECEIVED:
+${reviewerComments}
+
+Generate a complete, professional response letter. Structure it as follows:
+
+1. A short opening paragraph thanking the editors and reviewers, noting that the manuscript has been revised.
+
+2. For each reviewer (Reviewer 1, Reviewer 2, etc.) and each of their comments, create an entry:
+
+REVIEWER [N], COMMENT [N]:
+> [Quote the reviewer comment verbatim]
+
+Response:
+[AUTHOR TO COMPLETE — write your response here]
+
+Manuscript Change:
+[AUTHOR TO COMPLETE — describe what was changed and where in the manuscript]
+
+---
+
+Use "EDITOR COMMENTS" as a section header for any editor-level comments.
+Preserve all reviewer wording exactly when quoting.
+Leave the Response and Manuscript Change lines as prompts for the author to fill in.`;
+
+  const escaped = prompt.replace(/'/g, "'\\''");
+  const { stdout } = await execAsync(`claude -p '${escaped}'`, { timeout: 120000, maxBuffer: 10 * 1024 * 1024 });
+  return stdout.trim();
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -286,6 +429,16 @@ export async function POST(
       return Response.json({ content: generateContributorStatement(ms, coauthors) });
     case "checklist":
       return Response.json({ items: generateChecklist(ms.journal_requirements?.checklist_type) });
+    case "title-page":
+      return Response.json({ content: generateTitlePage(ms, coauthors) });
+    case "suggested-reviewers":
+      return Response.json({ content: generateSuggestedReviewers(ms) });
+    case "reviewer-response": {
+      const { reviewer_comments } = bodyParams as { reviewer_comments?: string };
+      if (!reviewer_comments?.trim()) return Response.json({ error: "reviewer_comments required" }, { status: 400 });
+      const content = await generateReviewerResponse(ms, reviewer_comments);
+      return Response.json({ content });
+    }
     default:
       return Response.json({ error: "Invalid type" }, { status: 400 });
   }

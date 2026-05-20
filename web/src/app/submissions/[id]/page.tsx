@@ -35,6 +35,12 @@ interface Manuscript {
   };
   suggested_reviewers: { name: string; email: string; institution: string; reason: string }[];
   excluded_reviewers: string[];
+  running_title: string;
+  funding: string;
+  irb_statement: string;
+  data_availability: string;
+  acknowledgments: string;
+  conflicts_of_interest: string;
 }
 
 const tabs = ["Overview", "Authors", "Checklist", "Files", "Documents"];
@@ -289,6 +295,156 @@ export default function ManuscriptDetailPage() {
               placeholder="Internal notes about this submission…"
             />
           </Field>
+
+          {/* Administrative / Title Page Info */}
+          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            <h3 className="text-xs font-semibold text-zinc-500 mb-3 uppercase tracking-wide">Title Page Info</h3>
+            <div className="space-y-4">
+              <Field label="Running Title">
+                <input
+                  type="text"
+                  value={ms.running_title || ""}
+                  onChange={(e) => setMs({ ...ms, running_title: e.target.value })}
+                  onBlur={() => save({ running_title: ms.running_title })}
+                  className="field-input"
+                  placeholder="Short title ≤ 50 characters"
+                />
+              </Field>
+              <Field label="Funding Acknowledgment">
+                <textarea
+                  value={ms.funding || ""}
+                  onChange={(e) => setMs({ ...ms, funding: e.target.value })}
+                  onBlur={() => save({ funding: ms.funding })}
+                  className="field-input resize-y min-h-[80px]"
+                  placeholder="This work was supported by the National Institute of Diabetes and Digestive and Kidney Diseases (R01DK123456) to L.Y."
+                />
+              </Field>
+              <Field label="Conflicts of Interest">
+                <input
+                  type="text"
+                  value={ms.conflicts_of_interest || ""}
+                  onChange={(e) => setMs({ ...ms, conflicts_of_interest: e.target.value })}
+                  onBlur={() => save({ conflicts_of_interest: ms.conflicts_of_interest })}
+                  className="field-input"
+                  placeholder="There are no conflicts of interest in this study."
+                />
+              </Field>
+              <Field label="Ethics / IRB Statement">
+                <textarea
+                  value={ms.irb_statement || ""}
+                  onChange={(e) => setMs({ ...ms, irb_statement: e.target.value })}
+                  onBlur={() => save({ irb_statement: ms.irb_statement })}
+                  className="field-input resize-y min-h-[80px]"
+                  placeholder="This study was approved by the University of Pittsburgh Institutional Review Board (Protocol No. STUDY21090203) and conducted in accordance with the Declaration of Helsinki."
+                />
+              </Field>
+              <Field label="Data Availability">
+                <textarea
+                  value={ms.data_availability || ""}
+                  onChange={(e) => setMs({ ...ms, data_availability: e.target.value })}
+                  onBlur={() => save({ data_availability: ms.data_availability })}
+                  className="field-input resize-y"
+                  placeholder="The data that support the findings of this study are available from the corresponding author upon reasonable request."
+                />
+              </Field>
+              <Field label="Acknowledgments">
+                <textarea
+                  value={ms.acknowledgments || ""}
+                  onChange={(e) => setMs({ ...ms, acknowledgments: e.target.value })}
+                  onBlur={() => save({ acknowledgments: ms.acknowledgments })}
+                  className="field-input resize-y min-h-[80px]"
+                  placeholder="We thank the research coordinators at…"
+                />
+              </Field>
+            </div>
+          </div>
+
+          {/* Suggested Reviewers */}
+          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Suggested Reviewers</h3>
+              <button
+                onClick={() => {
+                  const updated = [...(ms.suggested_reviewers || []), { name: "", email: "", institution: "", reason: "" }];
+                  setMs({ ...ms, suggested_reviewers: updated });
+                  save({ suggested_reviewers: updated });
+                }}
+                className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              >
+                + Add reviewer
+              </button>
+            </div>
+            <div className="space-y-3">
+              {(ms.suggested_reviewers || []).map((r, i) => (
+                <div key={i} className="border border-zinc-100 dark:border-zinc-800 rounded-lg p-3 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="text" value={r.name} placeholder="Full name"
+                      onChange={(e) => {
+                        const updated = ms.suggested_reviewers!.map((x, j) => j === i ? { ...x, name: e.target.value } : x);
+                        setMs({ ...ms, suggested_reviewers: updated });
+                      }}
+                      onBlur={() => save({ suggested_reviewers: ms.suggested_reviewers })}
+                      className="field-input text-xs"
+                    />
+                    <input
+                      type="email" value={r.email} placeholder="Email"
+                      onChange={(e) => {
+                        const updated = ms.suggested_reviewers!.map((x, j) => j === i ? { ...x, email: e.target.value } : x);
+                        setMs({ ...ms, suggested_reviewers: updated });
+                      }}
+                      onBlur={() => save({ suggested_reviewers: ms.suggested_reviewers })}
+                      className="field-input text-xs"
+                    />
+                    <input
+                      type="text" value={r.institution} placeholder="Institution"
+                      onChange={(e) => {
+                        const updated = ms.suggested_reviewers!.map((x, j) => j === i ? { ...x, institution: e.target.value } : x);
+                        setMs({ ...ms, suggested_reviewers: updated });
+                      }}
+                      onBlur={() => save({ suggested_reviewers: ms.suggested_reviewers })}
+                      className="field-input text-xs"
+                    />
+                    <input
+                      type="text" value={r.reason} placeholder="Area of expertise / reason"
+                      onChange={(e) => {
+                        const updated = ms.suggested_reviewers!.map((x, j) => j === i ? { ...x, reason: e.target.value } : x);
+                        setMs({ ...ms, suggested_reviewers: updated });
+                      }}
+                      onBlur={() => save({ suggested_reviewers: ms.suggested_reviewers })}
+                      className="field-input text-xs"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      const updated = ms.suggested_reviewers!.filter((_, j) => j !== i);
+                      setMs({ ...ms, suggested_reviewers: updated });
+                      save({ suggested_reviewers: updated });
+                    }}
+                    className="text-xs text-red-400 hover:text-red-500"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              {!(ms.suggested_reviewers?.length) && (
+                <p className="text-xs text-zinc-400">No suggested reviewers yet.</p>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-zinc-500 mb-1">Excluded Reviewers</label>
+              <input
+                type="text"
+                value={(ms.excluded_reviewers || []).join(", ")}
+                onChange={(e) => setMs({ ...ms, excluded_reviewers: e.target.value.split(",").map(s => s.trim()).filter(Boolean) })}
+                onBlur={() => save({ excluded_reviewers: ms.excluded_reviewers })}
+                className="field-input text-xs"
+                placeholder="Name 1, Name 2, Name 3"
+              />
+              <p className="text-xs text-zinc-400 mt-1">Comma-separated names of reviewers to exclude.</p>
+            </div>
+          </div>
         </div>
       )}
 

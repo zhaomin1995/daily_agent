@@ -27,8 +27,10 @@ interface SimpleDoc {
 }
 
 const simpleDocs: SimpleDoc[] = [
+  { type: "title-page", title: "Title Page", description: "Full title page with authors, affiliations, word counts, funding, IRB, and data availability." },
   { type: "author-block", title: "Author Block", description: "Formatted author list with numbered affiliations and corresponding author line." },
   { type: "contributor-statement", title: "Contributor Statement", description: "CRediT author contribution statement." },
+  { type: "suggested-reviewers", title: "Suggested Reviewers", description: "Formatted list of suggested and excluded reviewers for the submission portal." },
   { type: "checklist", title: "Reporting Checklist", description: "Full STROBE/CONSORT/PRISMA checklist as plain text." },
 ];
 
@@ -38,6 +40,8 @@ export default function DocumentsTab({ manuscriptId }: { manuscriptId: string })
   const [copied, setCopied] = useState<Record<string, boolean>>({});
   const [clFields, setClFields] = useState<CoverLetterFields>(DEFAULT_COVER_LETTER);
   const [showCLForm, setShowCLForm] = useState(false);
+  const [reviewerComments, setReviewerComments] = useState("");
+  const [showRRForm, setShowRRForm] = useState(true);
 
   async function generate(type: string, extra: Record<string, string> = {}) {
     setLoading((prev) => ({ ...prev, [type]: true }));
@@ -154,6 +158,56 @@ export default function DocumentsTab({ manuscriptId }: { manuscriptId: string })
             copied={copied["cover-letter"]}
             onCopy={() => copyToClipboard("cover-letter", results["cover-letter"])}
             onDownload={() => downloadAsTxt(results["cover-letter"], "cover-letter.txt")}
+          />
+        )}
+      </div>
+
+      {/* Reviewer Response Letter */}
+      <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <h3 className="text-sm font-semibold">Reviewer Response Letter</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">Point-by-point response template. Paste the decision letter with reviewer comments below.</p>
+          </div>
+          <button
+            onClick={() => setShowRRForm(!showRRForm)}
+            className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 shrink-0"
+          >
+            {showRRForm ? "Hide ↑" : "Show ↓"}
+          </button>
+        </div>
+
+        {showRRForm && (
+          <div className="mb-4">
+            <label className="block text-xs text-zinc-500 mb-1">
+              Reviewer Comments <span className="text-red-400">*</span>
+              <span className="ml-1 text-zinc-400 font-normal">(paste the full decision letter)</span>
+            </label>
+            <textarea
+              value={reviewerComments}
+              onChange={(e) => setReviewerComments(e.target.value)}
+              placeholder={"Dear Dr. Yang,\n\nThank you for submitting your manuscript...\n\nREVIEWER 1\n1. The authors should clarify..."}
+              rows={8}
+              className="field-input resize-y min-h-[140px] font-mono text-xs"
+            />
+          </div>
+        )}
+
+        <button
+          onClick={() => generate("reviewer-response", { reviewer_comments: reviewerComments })}
+          disabled={loading["reviewer-response"] || !reviewerComments.trim()}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50"
+        >
+          {loading["reviewer-response"] ? "Generating…" : "Generate Response Template"}
+        </button>
+
+        {results["reviewer-response"] && (
+          <ResultBlock
+            type="reviewer-response"
+            content={results["reviewer-response"]}
+            copied={copied["reviewer-response"]}
+            onCopy={() => copyToClipboard("reviewer-response", results["reviewer-response"])}
+            onDownload={() => downloadAsTxt(results["reviewer-response"], "reviewer-response.txt")}
           />
         )}
       </div>
