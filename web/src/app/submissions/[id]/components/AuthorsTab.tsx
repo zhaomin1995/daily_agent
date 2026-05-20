@@ -1,0 +1,214 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+interface Coauthor {
+  id: string;
+  name: string;
+  email: string;
+  orcid: string;
+  role: string;
+  institution: string;
+  department: string;
+}
+
+interface ManuscriptAuthor {
+  id: string;
+  order: number;
+  contributions: string[];
+}
+
+const CREDIT_ROLES = [
+  "Conceptualization", "Data curation", "Formal analysis", "Funding acquisition",
+  "Investigation", "Methodology", "Project administration", "Resources", "Software",
+  "Supervision", "Validation", "Visualization", "Writing – original draft",
+  "Writing – review & editing",
+];
+
+export default function AuthorsTab({
+  manuscriptId,
+  authors,
+  onSave,
+}: {
+  manuscriptId: string;
+  authors: ManuscriptAuthor[];
+  onSave: (authors: ManuscriptAuthor[]) => void;
+}) {
+  const [coauthors, setCoauthors] = useState<Coauthor[]>([]);
+  const [localAuthors, setLocalAuthors] = useState<ManuscriptAuthor[]>(authors);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+  const fetchCoauthors = useCallback(async () => {
+    const res = await fetch("/api/coauthors");
+    setCoauthors(await res.json());
+  }, []);
+
+  useEffect(() => { fetchCoauthors(); }, [fetchCoauthors]);
+  useEffect(() => { setLocalAuthors(authors); }, [authors]);
+
+  function getCoauthor(id: string) {
+    return coauthors.find((c) => c.id === id);
+  }
+
+  function updateAndSave(updated: ManuscriptAuthor[]) {
+    setLocalAuthors(updated);
+    onSave(updated);
+  }
+
+  function addAuthor(id: string) {
+    if (localAuthors.some((a) => a.id === id)) return;
+    const updated = [...localAuthors, { id, order: localAuthors.length + 1, contributions: [] }];
+    updateAndSave(updated);
+    setShowAdd(false);
+  }
+
+  function removeAuthor(id: string) {
+    const updated = localAuthors
+      .filter((a) => a.id !== id)
+      .map((a, i) => ({ ...a, order: i + 1 }));
+    updateAndSave(updated);
+  }
+
+  function toggleContribution(authorId: string, role: string) {
+    const updated = localAuthors.map((a) => {
+      if (a.id !== authorId) return a;
+      const has = a.contributions.includes(role);
+      return { ...a, contributions: has ? a.contributions.filter((r) => r !== role) : [...a.contributions, role] };
+    });
+    updateAndSave(updated);
+  }
+
+  function reorder(from: number, to: number) {
+    if (from === to) return;
+    const updated = [...localAuthors];
+    const [moved] = updated.splice(from, 1);
+    updated.splice(to, 0, moved);
+    updateAndSave(updated.map((a, i) => ({ ...a, order: i + 1 })));
+  }
+
+  const sorted = [...localAuthors].sort((a, b) => a.order - b.order);
+  const availableToAdd = coauthors.filter((c) => !localAuthors.some((a) => a.id === c.id));
+
+  // Contributor statement preview
+  const statement = sorted
+    .map((a) => {
+      const c = getCoauthor(a.id);
+      if (!c || a.contributions.length === 0) return null;
+      return `**${c.name}**: ${a.contributions.join(", ")}.`;
+    })
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className="space-y-6">
+      {/* Author list */}
+      <div className="space-y-2">
+        {sorted.map((a, i) => {
+          const c = getCoauthor(a.id);
+          return (
+            <div
+              key={a.id}
+              draggable
+              onDragStart={() => setDragIdx(i)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => { if (dragIdx !== null) reorder(dragIdx, i); setDragIdx(null); }}
+              onDragEnd={() => setDragIdx(null)}
+              className={`border border-zinc-200 dark:border-zinc-800 rounded-xl transition-all ${dragIdx === i ? "opacity-50" : ""}`}
+            >
+              <div className="flex items-center gap-3 p-4">
+                {/* Drag handle */}
+                <div className="cursor-grab active:cursor-grabbing text-zinc-300 dark:text-zinc-600 shrink-0">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="9" cy="5" r="1.5" /><circle cx="15" cy="5" r="1.5" />
+                    <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+                    <circle cx="9" cy="19" r="1.5" /><circle cx="15" cy="19" r="1.5" />
+                  </svg>
+                </div>
+
+                <span className="text-xs text-zinc-400 font-mono w-5 shrink-0">{a.order}</span>
+
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">{c?.name || a.id}</span>
+                  {c?.institution && <span className="text-xs text-zinc-500 ml-2">{c.institution}</span>}
+                  {c?.role === "corresponding" && (
+                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">
+                      corresponding
+                    </span>
+                  )}
+                </div>
+
+                <button onClick={() => setExpanded(expanded === a.id ? null : a.id)} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">
+                  {expanded === a.id ? "Collapse" : "CRediT"}
+                </button>
+                <button onClick={() => removeAuthor(a.id)} className="text-xs text-red-400 hover:text-red-500">
+                  Remove
+                </button>
+              </div>
+
+              {expanded === a.id && (
+                <div className="px-4 pb-4 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+                  <p className="text-xs text-zinc-500 mb-2">CRediT contributions:</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {CREDIT_ROLES.map((role) => (
+                      <label key={role} className="flex items-center gap-2 text-xs py-0.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={a.contributions.includes(role)}
+                          onChange={() => toggleContribution(a.id, role)}
+                          className="rounded"
+                        />
+                        {role}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add author */}
+      {showAdd ? (
+        <div className="border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl p-4">
+          <p className="text-xs text-zinc-500 mb-2">Select a coauthor to add:</p>
+          {availableToAdd.length === 0 ? (
+            <p className="text-xs text-zinc-400">All coauthors are already added.</p>
+          ) : (
+            <div className="space-y-1">
+              {availableToAdd.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => addAuthor(c.id)}
+                  className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  {c.name} <span className="text-xs text-zinc-400">· {c.institution}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setShowAdd(false)} className="text-xs text-zinc-400 hover:text-zinc-600 mt-2">Cancel</button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowAdd(true)}
+          className="w-full border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl py-3 text-sm text-zinc-400 hover:text-zinc-600 hover:border-zinc-400 dark:hover:text-zinc-300 dark:hover:border-zinc-600 transition-colors"
+        >
+          + Add Author
+        </button>
+      )}
+
+      {/* Contributor statement preview */}
+      {statement && (
+        <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+          <p className="text-xs font-medium text-zinc-500 mb-2">Contributor Statement Preview</p>
+          <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed" dangerouslySetInnerHTML={{
+            __html: statement.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+          }} />
+        </div>
+      )}
+    </div>
+  );
+}

@@ -183,6 +183,27 @@ main {
   stroke-dashoffset: 24;
 }
 
+/* Shared form field input style */
+.field-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  border: 1px solid var(--color-zinc-200, #e4e4e7);
+  border-radius: 0.5rem;
+  background: transparent;
+  outline: none;
+}
+
+.field-input:focus {
+  border-color: rgb(var(--accent-rgb));
+  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.2);
+}
+
+:is(.dark) .field-input {
+  border-color: var(--color-zinc-700, #3f3f46);
+}
+
 /* Reduced motion: disable all animations for accessibility */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
