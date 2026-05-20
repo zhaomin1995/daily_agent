@@ -12,6 +12,7 @@ interface ActionItem {
   text: string;
   date: string;
   completed: boolean;
+  wontdo: boolean;
   source: Source;
   priority?: Priority;
 }
@@ -25,6 +26,7 @@ interface ManualItem {
 interface State {
   completed: string[];
   deleted: string[];
+  wontdo: string[];
   overrides: Record<string, string>;
   priorities: Record<string, Priority>;
   manual: ManualItem[];
@@ -37,13 +39,14 @@ function loadState(): State {
       return {
         completed: data.completed || [],
         deleted: data.deleted || [],
+        wontdo: data.wontdo || [],
         overrides: data.overrides || {},
         priorities: data.priorities || {},
         manual: data.manual || [],
       };
     }
   } catch {}
-  return { completed: [], deleted: [], overrides: {}, priorities: {}, manual: [] };
+  return { completed: [], deleted: [], wontdo: [], overrides: {}, priorities: {}, manual: [] };
 }
 
 function saveState(state: State) {
@@ -101,6 +104,7 @@ export async function GET() {
   const state = loadState();
   const completedSet = new Set(state.completed);
   const deletedSet = new Set(state.deleted);
+  const wontdoSet = new Set(state.wontdo);
   const all: ActionItem[] = [];
 
   if (fs.existsSync(BRIEFING_DIR)) {
@@ -128,6 +132,7 @@ export async function GET() {
           ...item,
           text: state.overrides[item.id] ?? item.text,
           completed: completedSet.has(item.id),
+          wontdo: wontdoSet.has(item.id),
           priority: state.priorities[item.id],
         });
       }
@@ -136,7 +141,13 @@ export async function GET() {
 
   for (const m of state.manual) {
     if (deletedSet.has(m.id)) continue;
-    all.push({ ...m, source: "manual" as Source, completed: completedSet.has(m.id), priority: state.priorities[m.id] });
+    all.push({
+      ...m,
+      source: "manual" as Source,
+      completed: completedSet.has(m.id),
+      wontdo: wontdoSet.has(m.id),
+      priority: state.priorities[m.id],
+    });
   }
 
   return Response.json(all);
@@ -174,7 +185,7 @@ export async function POST(request: Request) {
   const id = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const date = new Date().toISOString().split("T")[0];
   saveState({ ...state, manual: [...state.manual, { id, text: text.trim(), date }] });
-  return Response.json({ id, text: text.trim(), date, completed: false, source: "manual" });
+  return Response.json({ id, text: text.trim(), date, completed: false, wontdo: false, source: "manual" });
 }
 
 export async function PATCH(request: Request) {
@@ -198,6 +209,17 @@ export async function PATCH(request: Request) {
     if (body.priority === null) delete priorities[id];
     else priorities[id] = body.priority as Priority;
     saveState({ ...loadState(), priorities }); // reload after potential text save above
+  }
+
+  if (body.wontdo === true) {
+    const wontdoSet = new Set(loadState().wontdo);
+    wontdoSet.add(id);
+    saveState({ ...loadState(), wontdo: [...wontdoSet] });
+  } else if (body.wontdo === false) {
+    // Undo: remove from wontdo
+    const wontdoSet = new Set(loadState().wontdo);
+    wontdoSet.delete(id);
+    saveState({ ...loadState(), wontdo: [...wontdoSet] });
   }
 
   return Response.json({ ok: true });

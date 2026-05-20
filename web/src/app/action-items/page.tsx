@@ -10,6 +10,7 @@ interface ActionItem {
   text: string;
   date: string;
   completed: boolean;
+  wontdo: boolean;
   source: Source;
   priority?: Priority;
 }
@@ -63,7 +64,7 @@ function applyOrder(items: ActionItem[], order: string[]): ActionItem[] {
 export default function ActionItemsPage() {
   const [items, setItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "open" | "done">("open");
+  const [filter, setFilter] = useState<"all" | "open" | "done" | "wontdo">("open");
   const [priorityFilter, setPriorityFilter] = useState<"all" | Priority>("all");
   const [newText, setNewText] = useState("");
   const [adding, setAdding] = useState(false);
@@ -193,6 +194,17 @@ export default function ActionItemsPage() {
     );
   }
 
+  function markWontdo(id: string) {
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, wontdo: true } : i));
+    scheduleUndo(
+      "Won't do",
+      () => setItems((prev) => prev.map((i) => i.id === id ? { ...i, wontdo: false } : i)),
+      () => fetch("/api/action-items", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, wontdo: true }) })
+    );
+  }
+
   async function cyclePriority(item: ActionItem) {
     const curr = item.priority;
     const next = PRIORITY_CYCLE[(PRIORITY_CYCLE.indexOf(curr) + 1) % PRIORITY_CYCLE.length];
@@ -221,7 +233,11 @@ export default function ActionItemsPage() {
   }
 
   const filtered = useMemo(() => items.filter((item) => {
-    const matchStatus = filter === "all" ? true : filter === "open" ? !item.completed : item.completed;
+    const matchStatus =
+      filter === "all" ? true :
+      filter === "open" ? !item.completed && !item.wontdo :
+      filter === "done" ? item.completed :
+      filter === "wontdo" ? item.wontdo : true;
     const matchPriority = priorityFilter === "all" ? true : item.priority === priorityFilter;
     return matchStatus && matchPriority;
   }), [items, filter, priorityFilter]);
@@ -237,9 +253,11 @@ export default function ActionItemsPage() {
     );
   }, [filtered, itemOrder]);
 
-  const openCount = items.filter((i) => !i.completed).length;
+  const openCount = items.filter((i) => !i.completed && !i.wontdo).length;
   const doneCount = items.filter((i) => i.completed).length;
-  const completionPct = items.length > 0 ? Math.round((doneCount / items.length) * 100) : 0;
+  const wontdoCount = items.filter((i) => i.wontdo).length;
+  const activeCount = items.filter((i) => !i.wontdo).length;
+  const completionPct = activeCount > 0 ? Math.round((doneCount / activeCount) * 100) : 0;
   const hasPriorityItems = items.some((i) => i.priority);
 
   return (
@@ -251,7 +269,7 @@ export default function ActionItemsPage() {
       {!loading && items.length > 0 && (
         <div className="mb-5">
           <div className="flex items-center justify-between text-xs text-zinc-500 mb-1.5">
-            <span>{doneCount} of {items.length} completed</span>
+            <span>{doneCount} of {activeCount} completed{wontdoCount > 0 ? ` · ${wontdoCount} skipped` : ""}</span>
             <span>{completionPct}%</span>
           </div>
           <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
@@ -266,10 +284,11 @@ export default function ActionItemsPage() {
       {/* Filter tabs + bulk actions */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <div className="flex gap-1 border border-zinc-200 dark:border-zinc-800 rounded-lg p-1 w-fit">
-          {(["open", "all", "done"] as const).map((f) => (
+          {(["open", "all", "done", "wontdo"] as const).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors capitalize ${filter === f ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
-              {f} {f === "open" ? `(${openCount})` : f === "done" ? `(${doneCount})` : `(${items.length})`}
+              {f === "wontdo" ? "skipped" : f}{" "}
+              {f === "open" ? `(${openCount})` : f === "done" ? `(${doneCount})` : f === "wontdo" ? `(${wontdoCount})` : `(${items.length})`}
             </button>
           ))}
         </div>
@@ -380,16 +399,30 @@ export default function ActionItemsPage() {
                         </div>
                       ) : (
                         <>
-                          <span className={`flex-1 text-sm leading-relaxed ${item.completed ? "line-through text-zinc-400 dark:text-zinc-600" : "text-zinc-700 dark:text-zinc-300"}`}>
+                          <span className={`flex-1 text-sm leading-relaxed ${item.completed ? "line-through text-zinc-400 dark:text-zinc-600" : item.wontdo ? "line-through text-zinc-400 dark:text-zinc-600 italic" : "text-zinc-700 dark:text-zinc-300"}`}>
                             {item.text}
                           </span>
+                          {/* Wontdo badge */}
+                          {item.wontdo && (
+                            <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
+                              skipped
+                            </span>
+                          )}
                           {/* Source badge — always visible for email items, hover-only for manual */}
-                          {SOURCE_BADGE[item.source] && (
+                          {!item.wontdo && SOURCE_BADGE[item.source] && (
                             <span className={`shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${SOURCE_BADGE[item.source]!.cls} ${item.source === "manual" ? "opacity-0 group-hover:opacity-100 transition-opacity" : ""}`}>
                               {SOURCE_BADGE[item.source]!.label}
                             </span>
                           )}
                           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            {!item.wontdo && !item.completed && (
+                              <button onClick={() => markWontdo(item.id)} title="Won't do"
+                                className="p-1 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                                </svg>
+                              </button>
+                            )}
                             <button onClick={() => { setEditingId(item.id); setEditText(item.text); }} title="Edit"
                               className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
