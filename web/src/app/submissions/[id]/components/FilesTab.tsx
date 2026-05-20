@@ -9,9 +9,28 @@ interface FileEntry {
   category: string;
 }
 
+interface JournalRequirements {
+  max_words: number | null;
+  max_abstract_words: number | null;
+  max_figures: number | null;
+  max_tables: number | null;
+  max_references: number | null;
+  reference_style: string;
+  required_sections: string[];
+  checklist_type: string | null;
+}
+
+interface AnalysisResult {
+  issues: string;
+  editedManuscript: string;
+  changesMade: string;
+  wordCountOriginal: number;
+  wordCountEdited: number | null;
+}
+
 const CATEGORIES = [
   { value: "manuscript", label: "Manuscript" },
-  { value: "blinded", label: "Blinded Manuscript" },
+  { value: "blinded", label: "Blinded" },
   { value: "figure", label: "Figure" },
   { value: "table", label: "Table" },
   { value: "supplementary", label: "Supplementary" },
@@ -19,50 +38,63 @@ const CATEGORIES = [
   { value: "other", label: "Other" },
 ];
 
-// Which categories are required for a complete submission package
-const REQUIRED_CATEGORIES = ["manuscript", "cover-letter"];
-const COMMON_CATEGORIES = ["figure", "supplementary"];
+const TASKS = [
+  { id: "review", label: "Full Review & Edit", desc: "Identify all issues and apply all fixes" },
+  { id: "trim", label: "Trim to Word Limit", desc: "Cut to fit the journal word limit", needsWordLimit: true },
+  { id: "abstract", label: "Edit Abstract", desc: "Fix abstract length and structure" },
+  { id: "sections", label: "Check Sections", desc: "Verify required sections are present" },
+];
 
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function categoryLabel(value: string): string {
-  return CATEGORIES.find((c) => c.value === value)?.label ?? value;
-}
-
-export default function FilesTab({ manuscriptId }: { manuscriptId: string }) {
+export default function FilesTab({
+  manuscriptId,
+  journal,
+  requirements,
+}: {
+  manuscriptId: string;
+  journal?: string;
+  requirements?: JournalRequirements;
+}) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadCategory, setUploadCategory] = useState("manuscript");
   const [dragOver, setDragOver] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectedManuscript, setSelectedManuscript] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [activeTask, setActiveTask] = useState<string | null>(null);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchFiles = useCallback(async () => {
     const res = await fetch(`/api/submissions/${manuscriptId}/files`);
     const data = await res.json();
-    setFiles(data.files || []);
+    const fetched: FileEntry[] = data.files || [];
+    setFiles(fetched);
+    // Auto-select single manuscript file
+    const manuscripts = fetched.filter((f) => f.category === "manuscript");
+    if (manuscripts.length === 1 && !selectedManuscript) {
+      setSelectedManuscript(manuscripts[0].name);
+    }
     setLoading(false);
-  }, [manuscriptId]);
+  }, [manuscriptId, selectedManuscript]);
 
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
   async function uploadFile(file: File) {
     setUploading(true);
-    setUploadError(null);
     const form = new FormData();
     form.append("file", file);
     form.append("category", uploadCategory);
     const res = await fetch(`/api/submissions/${manuscriptId}/files`, { method: "POST", body: form });
     if (res.ok) {
       await fetchFiles();
-    } else {
-      const data = await res.json();
-      setUploadError(data.error || "Upload failed");
     }
     setUploading(false);
   }
@@ -74,158 +106,281 @@ export default function FilesTab({ manuscriptId }: { manuscriptId: string }) {
       body: JSON.stringify({ filename: name }),
     });
     setFiles((prev) => prev.filter((f) => f.name !== name));
+    if (selectedManuscript === name) setSelectedManuscript(null);
   }
 
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) uploadFile(file);
+  async function analyze(task: string) {
+    if (!selectedManuscript) return;
+    setAnalyzing(true);
+    setActiveTask(task);
+    setResult(null);
+    setAnalysisError(null);
+    const res = await fetch(`/api/submissions/${manuscriptId}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: selectedManuscript, task }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setAnalysisError(data.error || "Analysis failed");
+    } else {
+      setResult(data as AnalysisResult);
+    }
+    setAnalyzing(false);
+    setActiveTask(null);
   }
 
-  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) uploadFile(file);
-    e.target.value = "";
+  async function copyEdited() {
+    if (!result?.editedManuscript) return;
+    await navigator.clipboard.writeText(result.editedManuscript);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
-  // Submission readiness: which required categories are present
-  const presentCategories = new Set(files.map((f) => f.category));
-  const ready = REQUIRED_CATEGORIES.every((c) => presentCategories.has(c));
+  function downloadEdited() {
+    if (!result?.editedManuscript) return;
+    const blob = new Blob([result.editedManuscript], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `edited-${selectedManuscript?.replace(/\.[^.]+$/, "") || "manuscript"}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
-  // Group files by category for display
-  const grouped = CATEGORIES.map((cat) => ({
-    ...cat,
-    files: files.filter((f) => f.category === cat.value),
-  })).filter((g) => g.files.length > 0);
+  const manuscriptFiles = files.filter((f) => f.category === "manuscript" || f.category === "blinded");
+  const otherFiles = files.filter((f) => f.category !== "manuscript" && f.category !== "blinded");
+  const hasRequirements = requirements && (
+    requirements.max_words || requirements.max_abstract_words || requirements.required_sections?.length
+  );
 
   return (
     <div className="space-y-5">
-      {/* Readiness summary */}
+      {/* Upload + File list */}
       <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-        <h3 className="text-sm font-semibold mb-3">Submission Package</h3>
-        <div className="flex flex-wrap gap-2">
-          {REQUIRED_CATEGORIES.map((cat) => (
-            <span key={cat} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-              presentCategories.has(cat)
-                ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
-            }`}>
-              <span>{presentCategories.has(cat) ? "✓" : "○"}</span>
-              {categoryLabel(cat)}
-            </span>
-          ))}
-          {COMMON_CATEGORIES.map((cat) => (
-            <span key={cat} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-              presentCategories.has(cat)
-                ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                : "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
-            }`}>
-              <span>{presentCategories.has(cat) ? "✓" : "○"}</span>
-              {categoryLabel(cat)}
-            </span>
-          ))}
-          {ready && (
-            <span className="ml-auto text-xs text-green-600 dark:text-green-400 font-medium self-center">
-              ✓ Core files ready
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Upload zone */}
-      <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-        <h3 className="text-sm font-semibold mb-3">Upload File</h3>
-        <div className="flex gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-3">
           <select
             value={uploadCategory}
             onChange={(e) => setUploadCategory(e.target.value)}
             className="px-2.5 py-1.5 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 ring-zinc-400"
           >
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>{c.label}</option>
-            ))}
+            {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
-          <span className="text-xs text-zinc-400 self-center">then drop a file or click below</span>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadFile(f); }}
+            onClick={() => fileInputRef.current?.click()}
+            className={`flex-1 flex items-center justify-center gap-2 h-10 border-2 border-dashed rounded-lg cursor-pointer text-xs transition-colors ${
+              dragOver ? "border-zinc-400 bg-zinc-50 dark:bg-zinc-800/50" : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 text-zinc-400 hover:text-zinc-500"
+            }`}
+          >
+            {uploading ? (
+              <><svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg> Uploading…</>
+            ) : (
+              <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg> Drop file or click to upload</>
+            )}
+          </div>
+          <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }} />
         </div>
 
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`relative flex flex-col items-center justify-center gap-2 h-28 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-            dragOver
-              ? "border-zinc-400 bg-zinc-50 dark:bg-zinc-800/50"
-              : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-800/30"
-          }`}
-        >
-          {uploading ? (
-            <div className="flex items-center gap-2 text-sm text-zinc-500">
-              <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-              </svg>
-              Uploading…
-            </div>
-          ) : (
-            <>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-zinc-300 dark:text-zinc-600">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
-              <span className="text-sm text-zinc-400">Drop file here or click to browse</span>
-              <span className="text-xs text-zinc-300 dark:text-zinc-600">.docx, .pdf, .xlsx, .png, .jpg, or any format</span>
-            </>
-          )}
-          <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileInput} />
-        </div>
-        {uploadError && <p className="mt-2 text-xs text-red-500">{uploadError}</p>}
+        {loading ? (
+          <div className="animate-pulse h-8 bg-zinc-100 dark:bg-zinc-800 rounded" />
+        ) : files.length === 0 ? (
+          <p className="text-xs text-zinc-400 text-center py-2">No files uploaded yet.</p>
+        ) : (
+          <div className="space-y-1">
+            {files.map((file) => {
+              const catLabel = CATEGORIES.find((c) => c.value === file.category)?.label ?? file.category;
+              const isSelected = selectedManuscript === file.name;
+              const isManuscriptType = file.category === "manuscript" || file.category === "blinded";
+              return (
+                <div
+                  key={file.name}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors group ${
+                    isSelected
+                      ? "border-zinc-900 dark:border-zinc-100 bg-zinc-50 dark:bg-zinc-800/50"
+                      : "border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 dark:hover:border-zinc-700"
+                  }`}
+                >
+                  {isManuscriptType && (
+                    <input
+                      type="radio"
+                      name="manuscript-select"
+                      checked={isSelected}
+                      onChange={() => setSelectedManuscript(file.name)}
+                      className="shrink-0"
+                      title="Select for AI analysis"
+                    />
+                  )}
+                  <a
+                    href={`/api/submissions/${manuscriptId}/files/${encodeURIComponent(file.name)}`}
+                    className="flex-1 text-xs text-zinc-700 dark:text-zinc-300 hover:underline truncate"
+                    download
+                  >
+                    {file.name}
+                  </a>
+                  <span className="text-xs text-zinc-400 shrink-0">{catLabel}</span>
+                  <span className="text-xs text-zinc-300 dark:text-zinc-600 shrink-0">{formatSize(file.size)}</span>
+                  <button
+                    onClick={() => deleteFile(file.name)}
+                    className="text-zinc-300 hover:text-red-500 dark:text-zinc-600 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    </svg>
+                  </button>
+                </div>
+              );
+            })}
+            {manuscriptFiles.length > 0 && (
+              <p className="text-xs text-zinc-400 pt-1">Select a manuscript file (radio) to analyze it below.</p>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* File list */}
-      {loading ? (
-        <div className="animate-pulse space-y-2">
-          {[1, 2].map((i) => <div key={i} className="h-10 bg-zinc-100 dark:bg-zinc-800/50 rounded-lg" />)}
+      {/* AI Manuscript Assistant */}
+      <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h3 className="text-sm font-semibold">AI Manuscript Assistant</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {selectedManuscript
+                ? `Working with: ${selectedManuscript}`
+                : "Upload a manuscript file and select it above to get started."}
+            </p>
+          </div>
         </div>
-      ) : files.length === 0 ? (
-        <p className="text-sm text-zinc-400 text-center py-4">No files uploaded yet.</p>
-      ) : (
-        <div className="space-y-4">
-          {grouped.map((group) => (
-            <div key={group.value}>
-              <h4 className="text-xs font-medium text-zinc-500 mb-1.5">{group.label}</h4>
-              <div className="space-y-1">
-                {group.files.map((file) => (
-                  <div key={file.name} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 dark:hover:border-zinc-700 group transition-colors">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-400 shrink-0">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    <a
-                      href={`/api/submissions/${manuscriptId}/files/${encodeURIComponent(file.name)}`}
-                      className="flex-1 text-sm text-zinc-700 dark:text-zinc-300 hover:underline truncate"
-                      download
-                    >
-                      {file.name}
-                    </a>
-                    <span className="text-xs text-zinc-400 shrink-0">{formatSize(file.size)}</span>
-                    <span className="text-xs text-zinc-300 dark:text-zinc-600 shrink-0 hidden sm:block">
-                      {new Date(file.modified).toLocaleDateString()}
-                    </span>
+
+        {/* Requirements summary */}
+        {hasRequirements && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {journal && <Badge>{journal}</Badge>}
+            {requirements?.max_words && <Badge>{requirements.max_words.toLocaleString()} words</Badge>}
+            {requirements?.max_abstract_words && <Badge>Abstract ≤ {requirements.max_abstract_words}</Badge>}
+            {requirements?.max_references && <Badge>≤ {requirements.max_references} refs</Badge>}
+            {requirements?.reference_style && <Badge>{requirements.reference_style}</Badge>}
+            {requirements?.checklist_type && <Badge>{requirements.checklist_type}</Badge>}
+            {requirements?.required_sections?.map((s) => <Badge key={s}>{s}</Badge>)}
+          </div>
+        )}
+
+        {!hasRequirements && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 mb-4">
+            No journal requirements set — go to the Checklist tab to add them for better editing.
+          </p>
+        )}
+
+        {/* Task buttons */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+          {TASKS.map((task) => {
+            const disabled = !selectedManuscript || analyzing || (task.needsWordLimit && !requirements?.max_words);
+            return (
+              <button
+                key={task.id}
+                onClick={() => analyze(task.id)}
+                disabled={disabled}
+                title={task.needsWordLimit && !requirements?.max_words ? "Set word limit in Checklist tab first" : task.desc}
+                className={`flex flex-col items-start px-3 py-2.5 rounded-lg border text-left transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  analyzing && activeTask === task.id
+                    ? "border-zinc-900 dark:border-zinc-100 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                    : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                }`}
+              >
+                {analyzing && activeTask === task.id ? (
+                  <div className="flex items-center gap-1.5 text-xs font-medium">
+                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                    Working…
+                  </div>
+                ) : (
+                  <span className="text-xs font-medium">{task.label}</span>
+                )}
+                <span className="text-xs text-zinc-400 mt-0.5 leading-tight">{task.desc}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {analyzing && (
+          <div className="flex items-center gap-2 text-xs text-zinc-500 py-2">
+            <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+            Analyzing manuscript — this may take 1–3 minutes…
+          </div>
+        )}
+
+        {analysisError && (
+          <p className="text-xs text-red-500 py-2">{analysisError}</p>
+        )}
+
+        {result && !analyzing && (
+          <div className="space-y-4 mt-2">
+            {/* Issues */}
+            {result.issues && (
+              <div>
+                <h4 className="text-xs font-semibold text-zinc-500 mb-2">Issues Found</h4>
+                <div className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-lg p-3 whitespace-pre-wrap">
+                  {result.issues}
+                </div>
+              </div>
+            )}
+
+            {/* Edited manuscript */}
+            {result.editedManuscript && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-zinc-500">
+                    Edited Manuscript
+                    {result.wordCountEdited != null && (
+                      <span className="ml-2 font-normal text-zinc-400">
+                        ({result.wordCountEdited.toLocaleString()} words
+                        {result.wordCountOriginal && result.wordCountEdited !== result.wordCountOriginal
+                          ? ` — was ${result.wordCountOriginal.toLocaleString()}`
+                          : ""})
+                      </span>
+                    )}
+                  </h4>
+                  <div className="flex gap-2">
                     <button
-                      onClick={() => deleteFile(file.name)}
-                      className="text-zinc-300 hover:text-red-500 dark:text-zinc-600 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                      title="Delete"
+                      onClick={copyEdited}
+                      className="px-2.5 py-1 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" />
-                      </svg>
+                      {copied ? "Copied!" : "Copy"}
+                    </button>
+                    <button
+                      onClick={downloadEdited}
+                      className="px-2.5 py-1 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      Download .txt
                     </button>
                   </div>
-                ))}
+                </div>
+                <pre className="text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap leading-relaxed font-sans max-h-[500px] overflow-y-auto">
+                  {result.editedManuscript}
+                </pre>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+
+            {/* Changes made */}
+            {result.changesMade && (
+              <div>
+                <h4 className="text-xs font-semibold text-zinc-500 mb-2">Changes Made</h4>
+                <div className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400 bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30 rounded-lg p-3 whitespace-pre-wrap">
+                  {result.changesMade}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+      {children}
+    </span>
   );
 }

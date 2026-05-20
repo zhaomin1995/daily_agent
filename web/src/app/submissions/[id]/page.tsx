@@ -311,7 +311,7 @@ export default function ManuscriptDetailPage() {
       )}
 
       {activeTab === "Files" && (
-        <FilesTab manuscriptId={id} />
+        <FilesTab manuscriptId={id} journal={ms.journal} requirements={ms.journal_requirements} />
       )}
 
       {activeTab === "Documents" && (
