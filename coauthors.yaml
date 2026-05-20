@@ -1,0 +1,262 @@
+coauthors:
+  - id: ly
+    name: Lanting Yang
+    credentials: MPH
+    email: layang@health.ucsd.edu
+    email_alt: lantingyang2017@gmail.com
+    orcid: "0000-0003-0597-9062"
+    role: corresponding
+    institution: University of California San Diego
+    department: "Division of Clinical Pharmacy, Skaggs School of Pharmacy and Pharmaceutical Sciences"
+    contributions: []
+
+  - id: ng
+    name: Nico Gabriel
+    credentials: MA
+    email: joseph.gabriel@cms.hhs.gov
+    orcid: "0000-0003-1793-2245"
+    role: coauthor
+    institution: Center for Medicare and Medicaid Innovation
+    department: ""
+    city: "Baltimore, MD"
+    contributions: []
+
+  - id: ih
+    name: Inmaculada Hernandez
+    credentials: "PhD PharmD"
+    email: inhernandez@health.ucsd.edu
+    orcid: ""
+    role: coauthor
+    institution: University of California San Diego
+    department: "Division of Clinical Pharmacy, Skaggs School of Pharmacy and Pharmaceutical Sciences"
+    contributions: []
+
+  - id: jg
+    name: Jingchuan Guo
+    credentials: "MD PhD"
+    email: serena.guo@purdue.edu
+    orcid: ""
+    role: coauthor
+    institution: Purdue University
+    department: "Department of Pharmacy Practice, College of Pharmacy"
+    city: "Indianapolis, IN"
+    contributions: []
+
+  - id: ke
+    name: Kerry M Empey
+    credentials: "PharmD PhD"
+    email: kme33@pitt.edu
+    orcid: "0000-0001-7531-2541"
+    role: coauthor
+    institution: University of Pittsburgh
+    department: "Department of Pharmaceutical Sciences, School of Pharmacy"
+    city: "Pittsburgh, PA 15261"
+    contributions: []
+
+  - id: ks
+    name: Kangho Suh
+    credentials: "PharmD PhD"
+    email: KAS551@pitt.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Pittsburgh
+    department: "Department of Pharmacy and Therapeutics, University of Pittsburgh School of Pharmacy"
+    city: "Pittsburgh, PA 15217"
+    contributions: []
+
+  - id: lk
+    name: Levent Kirisci
+    credentials: PhD
+    email: levent@pitt.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Pittsburgh
+    department: "Department of Pharmaceutical Sciences, University of Pittsburgh School of Pharmacy"
+    contributions: []
+
+  - id: skg
+    name: Sandra L. Kane-Gill
+    credentials: ""
+    email: Kane-Gill@pitt.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Pittsburgh
+    department: "Department of Pharmacy and Therapeutics, University of Pittsburgh School of Pharmacy"
+    city: "Pittsburgh, PA 15217"
+    contributions: []
+
+  - id: wg
+    name: Walid Gellad
+    credentials: "MD MPH"
+    email: walid.gellad@pitt.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Pittsburgh
+    department: "Division of General Internal Medicine, University of Pittsburgh School of Medicine; Center for Health Equity Research and Promotion, VA Pittsburgh Healthcare System"
+    contributions: []
+
+  - id: ue
+    name: Utibe Ralph Essien
+    credentials: "MD MPH"
+    email: uessien@mednet.ucla.edu
+    orcid: ""
+    role: coauthor
+    institution: University of California Los Angeles
+    department: "Division of General Internal Medicine and Health Services Research, David Geffen School of Medicine; Center for the Study of Healthcare Innovation, Implementation & Policy, Greater Los Angeles VA Healthcare System"
+    contributions: []
+
+  - id: ss
+    name: Samir Saba
+    credentials: MD
+    email: sabas@upmc.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Pittsburgh
+    department: "Division of Cardiology, Department of Medicine, University of Pittsburgh School of Medicine"
+    contributions: []
+
+  - id: jwm
+    name: Jared William Magnani
+    credentials: ""
+    email: magnanij@pitt.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Pittsburgh
+    department: "Division of Cardiology, Department of Medicine, University of Pittsburgh School of Medicine"
+    contributions: []
+
+  - id: st
+    name: Shangbin Tang
+    credentials: ""
+    email: st54@regenstrief.org
+    orcid: ""
+    role: coauthor
+    institution: Regenstrief Institute
+    city: "Indianapolis, IN 46202"
+    department: ""
+    contributions: []
+
+  - id: amf
+    name: A. Mark Fendrick
+    credentials: ""
+    email: amfen@med.umich.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Michigan
+    department: ""
+    contributions: []
+
+  - id: np
+    name: Nimish Patel
+    credentials: ""
+    email: nipatel@health.ucsd.edu
+    orcid: ""
+    role: coauthor
+    institution: University of California San Diego
+    department: "Division of Clinical Pharmacy, Skaggs School of Pharmacy and Pharmaceutical Sciences"
+    contributions: []
+
+  - id: lc
+    name: Lauren Cater
+    credentials: MS
+    email: lauren.cater@umt.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Montana
+    department: Skaggs School of Pharmacy
+    contributions: []
+
+  - id: hb
+    name: Hayley Blackburn
+    credentials: PharmD
+    email: hayley.blackburn@mso.umt.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Montana
+    department: Skaggs School of Pharmacy
+    contributions: []
+
+  - id: rlp
+    name: Robert L. Page 2nd
+    credentials: "PharmD MSPH"
+    email: robert.page@cuanschutz.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Colorado
+    department: "Departments of Clinical Pharmacy and Physical Medicine, Skaggs School of Pharmacy and Pharmaceutical Sciences"
+    city: "Aurora, CO"
+    contributions: []
+
+  # 2025 list only — may have moved since
+  - id: jb
+    name: Jiang Bian
+    credentials: PhD
+    email: bianjiang@ufl.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Florida
+    department: "Department of Health Outcomes and Biomedical Informatics"
+    city: "Gainesville, FL 32610"
+    contributions: []
+
+  - id: lab
+    name: Lori A Bilello
+    credentials: "PhD MBA MHS"
+    email: Lori.Bilello@jax.ufl.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Florida
+    department: "Department of Medicine, University of Florida College of Medicine"
+    city: "Jacksonville, FL 32209"
+    contributions: []
+
+  - id: drw
+    name: Davene R Wright
+    credentials: PhD
+    email: davene_wright@harvardpilgrim.org
+    orcid: ""
+    role: coauthor
+    institution: "Harvard Pilgrim Health Care Institute and Harvard Medical School"
+    department: Department of Population Medicine
+    city: "Boston, MA 02215"
+    contributions: []
+
+  - id: mh
+    name: Meiqi He
+    credentials: MS
+    email: wendyho512@gmail.com
+    orcid: ""
+    role: coauthor
+    institution: University of California San Diego
+    department: "Division of Clinical Pharmacy, Skaggs School of Pharmacy and Pharmaceutical Sciences"
+    contributions: []
+
+  - id: gs
+    name: Gretchen Swabe
+    credentials: MS
+    email: GRS63@pitt.edu
+    orcid: ""
+    role: coauthor
+    institution: University of Pittsburgh
+    department: "Division of Cardiology, Department of Medicine, University of Pittsburgh School of Medicine"
+    contributions: []
+
+  - id: ejb
+    name: Emelia J. Benjamin
+    credentials: ""
+    email: emelia@bu.edu
+    orcid: ""
+    role: coauthor
+    institution: Boston University
+    department: "Department of Medicine, Boston Medical Center and Chobanian and Avedisian School of Medicine; Department of Epidemiology, School of Public Health"
+    contributions: []
+
+  - id: tc
+    name: Teresa Cameron
+    credentials: ""
+    email: t2cameron@health.ucsd.edu
+    orcid: ""
+    role: coauthor
+    institution: University of California San Diego
+    department: "Division of Clinical Pharmacy, Skaggs School of Pharmacy and Pharmaceutical Sciences"
+    contributions: []

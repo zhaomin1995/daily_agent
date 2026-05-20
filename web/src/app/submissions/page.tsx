@@ -90,7 +90,10 @@ export default function SubmissionsPage() {
       <div className="flex items-center justify-between mb-6 sm:mb-8">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Submissions</h1>
-          <p className="text-sm text-zinc-500 mt-1">Manage manuscript submissions and checklists.</p>
+          <p className="text-sm text-zinc-500 mt-1">
+            Manage manuscript submissions and checklists. · {" "}
+            <a href="/submissions/coauthors" className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 underline underline-offset-2">Co-authors</a>
+          </p>
         </div>
         <button
           onClick={createNew}
