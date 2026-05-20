@@ -28,6 +28,30 @@ interface AnalysisResult {
   wordCountEdited: number | null;
 }
 
+interface ExtractedFields {
+  title?: string | null;
+  running_title?: string | null;
+  keywords?: string[] | null;
+  word_count?: number | null;
+  abstract_word_count?: number | null;
+  funding?: string | null;
+  irb_statement?: string | null;
+  data_availability?: string | null;
+  acknowledgments?: string | null;
+  conflicts_of_interest?: string | null;
+}
+
+interface MatchedAuthor {
+  id: string;
+  name: string;
+  order: number;
+}
+
+interface ExtractionResult {
+  fields: ExtractedFields;
+  authors: { matched: MatchedAuthor[]; unmatched: string[] };
+}
+
 const CATEGORIES = [
   { value: "manuscript", label: "Manuscript" },
   { value: "blinded", label: "Blinded" },
@@ -50,14 +74,29 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  running_title: "Running Title",
+  keywords: "Keywords",
+  word_count: "Word Count",
+  abstract_word_count: "Abstract Word Count",
+  funding: "Sources of Funding",
+  irb_statement: "IRB / Ethics Statement",
+  data_availability: "Data Availability",
+  acknowledgments: "Acknowledgments",
+  conflicts_of_interest: "Conflicts of Interest",
+};
+
 export default function FilesTab({
   manuscriptId,
   journal,
   requirements,
+  onApply,
 }: {
   manuscriptId: string;
   journal?: string;
   requirements?: JournalRequirements;
+  onApply?: (fields: ExtractedFields, authors: MatchedAuthor[]) => void;
 }) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +110,14 @@ export default function FilesTab({
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-fill state
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [extraction, setExtraction] = useState<ExtractionResult | null>(null);
+  const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
+  const [selectedAuthors, setSelectedAuthors] = useState<Set<string>>(new Set());
+  const [applied, setApplied] = useState(false);
 
   const fetchFiles = useCallback(async () => {
     const res = await fetch(`/api/submissions/${manuscriptId}/files`);
@@ -128,6 +175,48 @@ export default function FilesTab({
     }
     setAnalyzing(false);
     setActiveTask(null);
+  }
+
+  async function extractMetadata() {
+    if (!selectedManuscript) return;
+    setExtracting(true);
+    setExtractError(null);
+    setExtraction(null);
+    setApplied(false);
+    const res = await fetch(`/api/submissions/${manuscriptId}/extract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: selectedManuscript }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setExtractError(data.error || "Extraction failed");
+    } else {
+      const result = data as ExtractionResult;
+      setExtraction(result);
+      // Pre-select all non-null fields and all matched authors
+      const preSelected = new Set(
+        Object.entries(result.fields)
+          .filter(([, v]) => v !== null && v !== undefined)
+          .map(([k]) => k)
+      );
+      setSelectedFields(preSelected);
+      setSelectedAuthors(new Set(result.authors.matched.map((a) => a.id)));
+    }
+    setExtracting(false);
+  }
+
+  function applyExtraction() {
+    if (!extraction || !onApply) return;
+    const fields: ExtractedFields = {};
+    for (const [k, v] of Object.entries(extraction.fields)) {
+      if (selectedFields.has(k) && v !== null && v !== undefined) {
+        (fields as Record<string, unknown>)[k] = v;
+      }
+    }
+    const authors = extraction.authors.matched.filter((a) => selectedAuthors.has(a.id));
+    onApply(fields, authors);
+    setApplied(true);
   }
 
   async function copyEdited() {
@@ -236,6 +325,127 @@ export default function FilesTab({
             {manuscriptFiles.length > 0 && (
               <p className="text-xs text-zinc-400 pt-1">Select a manuscript file (radio) to analyze it below.</p>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Auto-fill Metadata */}
+      <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <h3 className="text-sm font-semibold">Auto-fill from Manuscript</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Extract title, authors, keywords, funding, IRB, and other fields automatically.
+              {selectedManuscript ? ` Using: ${selectedManuscript}` : " Select a manuscript file above first."}
+            </p>
+          </div>
+          <button
+            onClick={extractMetadata}
+            disabled={!selectedManuscript || extracting}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1.5"
+          >
+            {extracting ? (
+              <><svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>Extracting…</>
+            ) : "Extract Fields"}
+          </button>
+        </div>
+
+        {extracting && (
+          <p className="text-xs text-zinc-400">Reading manuscript and extracting fields — usually takes 20–40 seconds…</p>
+        )}
+
+        {extractError && (
+          <p className="text-xs text-red-500">{extractError}</p>
+        )}
+
+        {extraction && !extracting && (
+          <div className="space-y-3">
+            {/* Fields */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-zinc-500">Fields found — select which to apply:</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedFields(new Set(Object.entries(extraction.fields).filter(([,v]) => v != null).map(([k]) => k)))} className="text-xs text-zinc-400 hover:text-zinc-600">All</button>
+                  <button onClick={() => setSelectedFields(new Set())} className="text-xs text-zinc-400 hover:text-zinc-600">None</button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                {(Object.entries(extraction.fields) as [string, unknown][])
+                  .filter(([, v]) => v !== null && v !== undefined)
+                  .map(([key, value]) => {
+                    const display = Array.isArray(value)
+                      ? (value as string[]).join(", ")
+                      : typeof value === "number"
+                      ? value.toLocaleString()
+                      : String(value).slice(0, 120) + (String(value).length > 120 ? "…" : "");
+                    return (
+                      <label key={key} className="flex items-start gap-2.5 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={selectedFields.has(key)}
+                          onChange={(e) => {
+                            const next = new Set(selectedFields);
+                            e.target.checked ? next.add(key) : next.delete(key);
+                            setSelectedFields(next);
+                          }}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{FIELD_LABELS[key] ?? key}: </span>
+                          <span className="text-xs text-zinc-500">{display}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Authors */}
+            {(extraction.authors.matched.length > 0 || extraction.authors.unmatched.length > 0) && (
+              <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <p className="text-xs font-medium text-zinc-500 mb-2">Authors found in manuscript:</p>
+                <div className="space-y-1">
+                  {extraction.authors.matched.map((a) => (
+                    <label key={a.id} className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedAuthors.has(a.id)}
+                        onChange={(e) => {
+                          const next = new Set(selectedAuthors);
+                          e.target.checked ? next.add(a.id) : next.delete(a.id);
+                          setSelectedAuthors(next);
+                        }}
+                        className="shrink-0"
+                      />
+                      <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                        {a.order}. {a.name}
+                        <span className="ml-1.5 text-green-600 dark:text-green-400 text-xs">✓ matched</span>
+                      </span>
+                    </label>
+                  ))}
+                  {extraction.authors.unmatched.map((name) => (
+                    <div key={name} className="flex items-center gap-2.5 pl-5">
+                      <span className="text-xs text-zinc-400">{name}
+                        <span className="ml-1.5 text-amber-500 text-xs">— not in coauthors list</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                onClick={applyExtraction}
+                disabled={applied || (selectedFields.size === 0 && selectedAuthors.size === 0)}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50"
+              >
+                {applied ? "✓ Applied" : `Apply ${selectedFields.size + selectedAuthors.size} field${selectedFields.size + selectedAuthors.size !== 1 ? "s" : ""}`}
+              </button>
+              {applied && (
+                <span className="text-xs text-green-600 dark:text-green-400">Saved to manuscript — check Overview tab.</span>
+              )}
+            </div>
           </div>
         )}
       </div>

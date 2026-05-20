@@ -467,7 +467,29 @@ export default function ManuscriptDetailPage() {
       )}
 
       {activeTab === "Files" && (
-        <FilesTab manuscriptId={id} journal={ms.journal} requirements={ms.journal_requirements} />
+        <FilesTab
+          manuscriptId={id}
+          journal={ms.journal}
+          requirements={ms.journal_requirements}
+          onApply={(fields, authors) => {
+            // Merge extracted fields into manuscript
+            const updates: Partial<Manuscript> = { ...(fields as Partial<Manuscript>) };
+            // Add matched authors (append if not already present)
+            if (authors.length > 0) {
+              const existing = new Set((ms.authors || []).map((a) => a.id));
+              const newAuthors = authors.filter((a) => !existing.has(a.id)).map((a) => ({
+                id: a.id,
+                order: a.order,
+                contributions: [],
+              }));
+              if (newAuthors.length > 0) {
+                updates.authors = [...(ms.authors || []), ...newAuthors];
+              }
+            }
+            setMs({ ...ms, ...updates });
+            save(updates);
+          }}
+        />
       )}
 
       {activeTab === "Documents" && (
