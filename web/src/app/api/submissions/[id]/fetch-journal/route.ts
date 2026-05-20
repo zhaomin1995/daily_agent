@@ -11,6 +11,7 @@ const execAsync = promisify(exec);
 
 interface JournalRequirements {
   journal_name: string | null;
+  journal_abbrev: string | null;
   max_words: number | null;
   max_abstract_words: number | null;
   max_figures: number | null;
@@ -66,7 +67,8 @@ const EXTRACTION_PROMPT = (text: string) => `You are extracting journal submissi
 Extract the following fields and return ONLY valid JSON (no markdown, no explanation):
 
 {
-  "journal_name": string or null,
+  "journal_name": string or null (full journal name),
+  "journal_abbrev": string or null (standard abbreviation, e.g. "Diabetes Care", "JAMA", "N Engl J Med"),
   "max_words": integer or null,
   "max_abstract_words": integer or null,
   "max_figures": integer or null,
@@ -99,10 +101,11 @@ function saveExtracted(id: string, extracted: JournalRequirements, sourceUrl?: s
   const filePath = path.join(SUBMISSIONS_DIR, `${id}.yaml`);
   if (!fs.existsSync(filePath)) return;
   const existing = yaml.load(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
-  const { journal_name, additional_notes, ...reqFields } = extracted;
+  const { journal_name, journal_abbrev, additional_notes, ...reqFields } = extracted;
   const updated = {
     ...existing,
     ...(journal_name && !existing.journal ? { journal: journal_name } : {}),
+    ...(journal_abbrev && !existing.journal_abbrev ? { journal_abbrev } : {}),
     ...(sourceUrl ? { journal_url: sourceUrl } : {}),
     journal_requirements: {
       ...(existing.journal_requirements as object || {}),

@@ -266,6 +266,12 @@ export default function ManuscriptDetailPage() {
           manuscriptId={id}
           requirements={ms.journal_requirements}
           onSave={(journal_requirements) => save({ journal_requirements })}
+          onJournalFetch={(info) => {
+            const updates: Partial<Manuscript> = {};
+            if (info.journal && !ms.journal) updates.journal = info.journal;
+            if (info.journal_abbrev && !ms.journal_abbrev) updates.journal_abbrev = info.journal_abbrev;
+            if (Object.keys(updates).length > 0) save(updates);
+          }}
         />
       )}
 

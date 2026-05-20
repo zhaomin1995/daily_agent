@@ -23,10 +23,12 @@ export default function ChecklistTab({
   manuscriptId,
   requirements,
   onSave,
+  onJournalFetch,
 }: {
   manuscriptId: string;
   requirements: JournalRequirements;
   onSave: (requirements: JournalRequirements) => void;
+  onJournalFetch?: (info: { journal?: string; journal_abbrev?: string }) => void;
 }) {
   const [reqs, setReqs] = useState<JournalRequirements>(requirements);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
@@ -87,6 +89,12 @@ export default function ChecklistTab({
       onSave(merged);
       const name = extracted.journal_name ? ` from ${extracted.journal_name}` : "";
       setFetchResult({ ok: true, message: `${data.fieldsFound} field${data.fieldsFound !== 1 ? "s" : ""} extracted${name}` });
+      if (onJournalFetch) {
+        onJournalFetch({
+          ...(extracted.journal_name ? { journal: extracted.journal_name } : {}),
+          ...(extracted.journal_abbrev ? { journal_abbrev: extracted.journal_abbrev } : {}),
+        });
+      }
       setShowPaste(false);
       setPastedText("");
     } catch (e) {
