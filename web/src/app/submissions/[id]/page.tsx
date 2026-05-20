@@ -136,9 +136,8 @@ export default function ManuscriptDetailPage() {
         ))}
       </div>
 
-      {/* Tab Content */}
-      {activeTab === "Overview" && (
-        <div className="space-y-4">
+      {/* Tab Content — all panels always mounted, hidden class preserves state */}
+      <div className={activeTab === "Overview" ? "space-y-4" : "hidden"}>
           {/* Compliance bars — shown when both count and limit are set */}
           {(() => {
             const bars = [
@@ -445,14 +444,14 @@ export default function ManuscriptDetailPage() {
               <p className="text-xs text-zinc-400 mt-1">Comma-separated names of reviewers to exclude.</p>
             </div>
           </div>
-        </div>
-      )}
+      </div>
 
-      {activeTab === "Authors" && (
+      {/* Always-mounted panels — hidden class preserves state across tab switches */}
+      <div className={activeTab === "Authors" ? "" : "hidden"}>
         <AuthorsTab manuscriptId={id} authors={ms.authors || []} onSave={(authors) => save({ authors })} />
-      )}
+      </div>
 
-      {activeTab === "Checklist" && (
+      <div className={activeTab === "Checklist" ? "" : "hidden"}>
         <ChecklistTab
           manuscriptId={id}
           requirements={ms.journal_requirements}
@@ -464,17 +463,15 @@ export default function ManuscriptDetailPage() {
             if (Object.keys(updates).length > 0) save(updates);
           }}
         />
-      )}
+      </div>
 
-      {activeTab === "Files" && (
+      <div className={activeTab === "Files" ? "" : "hidden"}>
         <FilesTab
           manuscriptId={id}
           journal={ms.journal}
           requirements={ms.journal_requirements}
           onApply={(fields, authors) => {
-            // Merge extracted fields into manuscript
             const updates: Partial<Manuscript> = { ...(fields as Partial<Manuscript>) };
-            // Add matched authors (append if not already present)
             if (authors.length > 0) {
               const existing = new Set((ms.authors || []).map((a) => a.id));
               const newAuthors = authors.filter((a) => !existing.has(a.id)).map((a) => ({
@@ -490,11 +487,13 @@ export default function ManuscriptDetailPage() {
             save(updates);
           }}
         />
-      )}
+      </div>
 
-      {activeTab === "Documents" && (
+      <div className={activeTab === "Documents" ? "" : "hidden"}>
         <DocumentsTab manuscriptId={id} />
-      )}
+      </div>
+
+
     </div>
   );
 }

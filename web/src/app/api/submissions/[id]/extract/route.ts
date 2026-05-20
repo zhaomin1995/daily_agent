@@ -58,10 +58,14 @@ async function extractText(filePath: string): Promise<string> {
   throw new Error(`Unsupported file type: ${ext}`);
 }
 
-// Strip degree abbreviations to get clean name for matching
+// Strip degree abbreviations and superscript numbers to get clean name for matching
 function cleanAuthorName(raw: string): string {
   return raw
-    .replace(/,?\s*(PhD|MD|PharmD|MPH|MS|MA|MBA|ScM|DrPH|DO|RN|NP|PA|FACP|FAHA|FAHMS|AO|MSc|MHS|BSc|BS|BA|ScD|DrSc|FCCP)[,.]?/gi, "")
+    // Remove degree abbreviations
+    .replace(/,?\s*(PhD|PharmD|DrPH|DrSc|FAHMS|FAHA|FACP|ScM|MSc|MHS|MPH|MBA|MD|MA|MS|DO|RN|NP|PA|AO|ScD|BSc|BS|BA|FCCP)[,.]?/gi, "")
+    // Remove Unicode superscripts (¹²³ etc.) and plain digit superscripts like ",2" or " 2"
+    .replace(/[¹²³⁴⁵⁶⁷⁸⁹]/g, "")
+    .replace(/,?\s*\d+/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
