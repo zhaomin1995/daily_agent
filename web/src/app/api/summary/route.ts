@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { BRIEFING_DIR, DEADLINES_FILE } from "@/lib/paths";
+import { BRIEFING_DIR, DEADLINES_FILE, ACTION_ITEMS_STATE } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
@@ -10,10 +10,18 @@ function countSection(content: string, header: string): number {
   const after = content.slice(idx + header.length);
   const end = after.search(/\n###/);
   const section = end === -1 ? after : after.slice(0, end);
-  return section.split("\n").filter((l) => {
-    const t = l.trim();
-    return t && !t.startsWith("#") && t !== "*(none)*" && !t.startsWith("→");
-  }).length;
+  if (section.includes("*(none)*")) return 0;
+  return section.split("\n").filter((l) => /^\*\*(.+?)\*\*[^|]*\|/.test(l)).length;
+}
+
+function loadCompleted(): Set<string> {
+  try {
+    if (fs.existsSync(ACTION_ITEMS_STATE)) {
+      const data = JSON.parse(fs.readFileSync(ACTION_ITEMS_STATE, "utf-8"));
+      return new Set<string>(data.completed || []);
+    }
+  } catch {}
+  return new Set();
 }
 
 function parseNearestDeadline(): string | null {
@@ -62,15 +70,32 @@ export async function GET() {
   let urgent = 0;
   let actionNeeded = 0;
   let priorities = 0;
+  const completed = loadCompleted();
 
   if (fs.existsSync(emailFile)) {
     const c = fs.readFileSync(emailFile, "utf-8");
-    urgent = countSection(c, "### Urgent");
-    actionNeeded = countSection(c, "### Action Needed");
+    const rawUrgent = countSection(c, "### Urgent");
+    const rawAction = countSection(c, "### Action Needed");
+    // Subtract completed items using stable IDs: ${date}-email-urgent-${i}
+    let doneUrgent = 0;
+    for (let i = 0; i < rawUrgent; i++) {
+      if (completed.has(`${today}-email-urgent-${i}`)) doneUrgent++;
+    }
+    let doneAction = 0;
+    for (let i = 0; i < rawAction; i++) {
+      if (completed.has(`${today}-email-action-${i}`)) doneAction++;
+    }
+    urgent = Math.max(0, rawUrgent - doneUrgent);
+    actionNeeded = Math.max(0, rawAction - doneAction);
   }
 
   if (fs.existsSync(workflowFile)) {
-    priorities = countPriorities(fs.readFileSync(workflowFile, "utf-8"));
+    const c = fs.readFileSync(workflowFile, "utf-8");
+    const rawPriorities = countPriorities(c);
+    // Subtract completed workflow items using IDs: ${date}-${lineIndex}
+    // Line indexes are assigned during extraction — count completed ones for today
+    const doneWorkflow = [...completed].filter((id) => id.startsWith(`${today}-`) && !id.includes("email-") && !id.startsWith("manual-")).length;
+    priorities = Math.max(0, rawPriorities - doneWorkflow);
   }
 
   return Response.json({ urgent, actionNeeded, priorities, nearestDeadline: parseNearestDeadline() });

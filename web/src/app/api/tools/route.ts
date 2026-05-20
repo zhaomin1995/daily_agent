@@ -56,16 +56,15 @@ function getBadgeCount(toolId: string): number | null {
     const f = path.join(BRIEFING_DIR, `${today}-email.md`);
     if (!fs.existsSync(f)) return null;
     const c = fs.readFileSync(f, "utf-8");
-    const count = [c.indexOf("### Urgent"), c.indexOf("### Action Needed")]
-      .filter((i) => i !== -1)
-      .reduce((sum, idx) => {
-        const after = c.slice(idx);
+    const count = ["### Urgent", "### Action Needed"]
+      .reduce((sum, heading) => {
+        const idx = c.indexOf(heading);
+        if (idx === -1) return sum;
+        const after = c.slice(idx + heading.length);
         const end = after.search(/\n###/);
         const section = end === -1 ? after : after.slice(0, end);
-        return sum + section.split("\n").filter((l) => {
-          const t = l.trim();
-          return t && !t.startsWith("#") && t !== "*(none)*" && !t.startsWith("→");
-        }).length;
+        if (section.includes("*(none)*")) return sum;
+        return sum + section.split("\n").filter((l) => /^\*\*(.+?)\*\*[^|]*\|/.test(l)).length;
       }, 0);
     return count > 0 ? count : null;
   }

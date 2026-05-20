@@ -1,0 +1,273 @@
+You are building a Manuscript Submission Assistant integrated into an existing Next.js 16 + React 19 + Tailwind CSS 4 + TypeScript web dashboard located at ~/github/daily_agent/web/. The app already runs at http://localhost:3000.
+
+Read the existing codebase structure before writing any code:
+- web/src/app/page.tsx — dashboard home
+- web/src/components/Sidebar.tsx — navigation sidebar
+- web/src/lib/paths.ts — shared path constants
+- web/src/lib/tools.ts — tool registry
+
+## Overview of what to build
+
+A "Submissions" section in the existing dashboard with:
+1. A coauthor database (YAML file + editor UI)
+2. Per-manuscript submission prep: journal checklist, author block, contributor statement, STROBE/CONSORT/PRISMA checklist, cover letter
+3. A submission tracker (list of manuscripts with status)
+
+---
+
+## File 1: ~/github/daily_agent/coauthors.yaml
+
+Create this file with placeholder entries that demonstrate the schema:
+
+```yaml
+coauthors:
+  - id: ly
+    name: Lanting Yang
+    email: lantingyang2017@gmail.com
+    orcid: ""
+    role: corresponding
+    institution: University of California San Diego
+    department: ""
+    contributions: []   # CRediT roles: see list below
+
+  - id: example_coauthor
+    name: Jane Smith
+    email: jsmith@university.edu
+    orcid: "0000-0000-0000-0000"
+    role: coauthor
+    institution: Example University
+    department: Department of Medicine
+    contributions: []
+```
+
+Valid CRediT contribution roles (use exact strings):
+Conceptualization, Data curation, Formal analysis, Funding acquisition,
+Investigation, Methodology, Project administration, Resources, Software,
+Supervision, Validation, Visualization, Writing – original draft,
+Writing – review & editing
+
+---
+
+## File 2: ~/github/daily_agent/submissions/
+
+Create this directory. Each manuscript gets a YAML file here, e.g. `submissions/manuscript-1.yaml`:
+
+```yaml
+id: manuscript-1
+title: "Your Manuscript Title Here"
+journal: "Journal of Example Medicine"
+journal_abbrev: "J Example Med"
+submission_type: original   # original | revision | resubmission
+status: draft               # draft | submitted | under_review | revision | accepted | rejected
+submitted_date: null
+decision_date: null
+next_action: "Prepare submission package"
+next_action_due: null
+
+manuscript_file: ""         # path to .docx or .pdf
+cover_letter_file: ""
+
+authors:
+  - id: ly
+    order: 1
+    contributions:
+      - Conceptualization
+      - Formal analysis
+      - Writing – original draft
+      - Writing – review & editing
+  # add more author IDs from coauthors.yaml
+
+keywords: []
+word_count: null
+abstract_word_count: null
+
+journal_requirements:
+  max_words: null
+  max_abstract_words: null
+  max_figures: null
+  max_tables: null
+  max_references: null
+  reference_style: ""       # Vancouver | APA | AMA | Chicago
+  required_sections: []
+  checklist_type: null      # STROBE | CONSORT | PRISMA | CARE | AGREE | null
+
+suggested_reviewers:
+  - name: ""
+    email: ""
+    institution: ""
+    reason: ""
+
+excluded_reviewers: []
+
+notes: ""
+```
+
+---
+
+## File 3: web/src/lib/submissionPaths.ts
+
+```typescript
+import path from "path";
+import os from "os";
+
+const home = os.homedir();
+const repoDir = path.resolve(process.cwd(), "..");
+
+export const COAUTHORS_FILE = path.join(repoDir, "coauthors.yaml");
+export const SUBMISSIONS_DIR = path.join(repoDir, "submissions");
+```
+
+---
+
+## File 4: web/src/app/submissions/page.tsx
+
+A full-page React component (client component) that shows:
+
+**Header row:** "Submissions" title + "New Manuscript" button
+
+**Submission list:** A card for each .yaml file in the submissions/ directory. Each card shows:
+- Title (truncated if long)
+- Journal name
+- Status badge (color-coded: draft=zinc, submitted=blue, under_review=amber, revision=orange, accepted=green, rejected=red)
+- Next action text + due date if set
+- Author count
+- "Prepare →" button that navigates to /submissions/[id]
+
+**Empty state:** If no submissions, show a prompt to create the first one.
+
+Fetch data from GET /api/submissions.
+
+---
+
+## File 5: web/src/app/submissions/[id]/page.tsx
+
+A tabbed detail page for a single manuscript. Tabs:
+1. **Overview** — editable fields: title, journal, status, next action, notes
+2. **Authors** — ordered author list from coauthors.yaml, drag to reorder, checkboxes for CRediT contributions per author, auto-generates contributor statement preview
+3. **Checklist** — journal requirements form + STROBE/CONSORT/PRISMA interactive checklist (rendered based on checklist_type)
+4. **Documents** — buttons to generate: Cover Letter, Author Block, Contributor Statement, Completed Checklist. Each generates a markdown preview and a copy button.
+
+---
+
+## File 6: web/src/app/api/submissions/route.ts
+
+```typescript
+import fs from "fs";
+import path from "path";
+import { SUBMISSIONS_DIR } from "@/lib/submissionPaths";
+import yaml from "js-yaml";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  if (!fs.existsSync(SUBMISSIONS_DIR)) return Response.json([]);
+  const files = fs.readdirSync(SUBMISSIONS_DIR).filter((f) => f.endsWith(".yaml"));
+  const submissions = files.map((f) => {
+    const content = fs.readFileSync(path.join(SUBMISSIONS_DIR, f), "utf-8");
+    return yaml.load(content);
+  });
+  return Response.json(submissions);
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const id = body.id || `manuscript-${Date.now()}`;
+  const filePath = path.join(SUBMISSIONS_DIR, `${id}.yaml`);
+  fs.mkdirSync(SUBMISSIONS_DIR, { recursive: true });
+  fs.writeFileSync(filePath, yaml.dump({ id, ...body }));
+  return Response.json({ ok: true, id });
+}
+```
+
+---
+
+## File 7: web/src/app/api/submissions/[id]/route.ts
+
+Handles GET (read one), PUT (update fields), DELETE (remove file).
+
+For PUT: read existing YAML, merge in body fields, write back.
+
+---
+
+## File 8: web/src/app/api/submissions/[id]/generate/route.ts
+
+POST endpoint that generates documents. Body: `{ type: "cover-letter" | "author-block" | "contributor-statement" | "checklist" }`
+
+**cover-letter**: Generate markdown cover letter using:
+- Manuscript title, journal name
+- Corresponding author name + email from coauthors.yaml
+- A template: "Dear Editors, We are pleased to submit our manuscript '[title]' for consideration in [journal]. [Novelty placeholder — user fills in]. All authors have read and approved the manuscript. The authors declare no conflicts of interest. Sincerely, [Corresponding Author Name]"
+
+**author-block**: Format author list as:
+```
+First Author¹, Second Author¹², Third Author²
+¹ Institution One, Department
+² Institution Two, Department
+Corresponding author: Name, email
+```
+Number affiliations automatically, deduplicate shared affiliations.
+
+**contributor-statement**: Generate CRediT statement in standard format:
+"[Name]: Conceptualization, Formal analysis. [Name]: Writing – review & editing." etc.
+
+**checklist**: Return the appropriate checklist items as a JSON array with `{ item: string, checked: boolean, note: string }` objects. Implement STROBE (22 items), CONSORT (25 items), and PRISMA (27 items) as static arrays.
+
+For STROBE checklist items use the official STROBE 2007 checklist for observational studies (cohort, case-control, cross-sectional).
+
+---
+
+## File 9: web/src/app/api/coauthors/route.ts
+
+GET: read and parse ~/github/daily_agent/coauthors.yaml, return as JSON array.
+PUT: accept updated coauthors array, write back to YAML.
+
+---
+
+## File 10: web/src/app/submissions/[id]/components/
+
+Create these sub-components:
+
+**AuthorsTab.tsx** — Reads coauthors from /api/coauthors. Shows manuscript authors in order with drag handles. For each author: name, institution, role badge. Expandable CRediT checklist per author (14 checkboxes). Shows live contributor statement preview below the list.
+
+**ChecklistTab.tsx** — Shows journal requirements fields (word count limits, reference style, etc.) as an editable form. Below that, shows the reporting checklist (STROBE/CONSORT/PRISMA) as an interactive checklist — each item has a checkbox, the item text, and a notes field. Shows completion percentage as a progress bar.
+
+**DocumentsTab.tsx** — Four cards, each with a title, description, and "Generate" button. On click, calls POST /api/submissions/[id]/generate with the appropriate type. Shows the result as a markdown block with a "Copy" button. Include a "Download as .txt" button.
+
+---
+
+## File 11: Update web/src/components/Sidebar.tsx
+
+Add a "Submissions" nav item between Action Items and Logs. Use a file-text or book-open SVG icon. Link to /submissions.
+
+---
+
+## Dependencies to install
+
+Run: `cd ~/github/daily_agent/web && npm install js-yaml @types/js-yaml`
+
+js-yaml is needed to parse/write YAML files in the API routes.
+
+---
+
+## Design guidelines
+
+- Match the existing app's design language: zinc color palette, rounded-xl cards, text-sm, Tailwind CSS 4
+- Status badges: use the same pill style as action item source badges
+- All forms should auto-save on blur (PATCH to the API), no explicit Save button needed
+- Use optimistic UI updates — update local state immediately, then sync to server
+- The /submissions page should feel like a lightweight project tracker, not a complex form wizard
+- Mobile-friendly: all grids should collapse to single column on small screens
+- Keep all generated documents as plain markdown — no PDF generation needed
+
+---
+
+## What NOT to build
+
+- Do not build any browser automation or form-filling for journal portals
+- Do not build email sending — all outputs are copy/paste ready
+- Do not build authentication — this is a local personal tool
+- Do not add a database — YAML files are the source of truth
+
+---
+
+After generating all files, start the dev server with `cd ~/github/daily_agent/web && npm run dev` and confirm there are no TypeScript or build errors. Fix any errors before reporting done.

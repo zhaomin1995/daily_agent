@@ -5,17 +5,19 @@ import { BRIEFING_DIR } from "@/lib/paths";
 export const dynamic = "force-dynamic";
 
 function emailBadge(content: string): number {
-  return [content.indexOf("### Urgent"), content.indexOf("### Action Needed")]
-    .filter((i) => i !== -1)
-    .reduce((sum, idx) => {
-      const after = content.slice(idx);
-      const end = after.search(/\n###/);
-      const section = end === -1 ? after : after.slice(0, end);
-      return sum + section.split("\n").filter((l) => {
-        const t = l.trim();
-        return t && !t.startsWith("#") && t !== "*(none)*" && !t.startsWith("→");
-      }).length;
-    }, 0);
+  let count = 0;
+  for (const heading of ["### Urgent", "### Action Needed"]) {
+    const idx = content.indexOf(heading);
+    if (idx === -1) continue;
+    const after = content.slice(idx + heading.length);
+    const end = after.search(/\n###/);
+    const section = end === -1 ? after : after.slice(0, end);
+    if (section.includes("*(none)*")) continue;
+    for (const line of section.split("\n")) {
+      if (/^\*\*(.+?)\*\*[^|]*\|/.test(line)) count++;
+    }
+  }
+  return count;
 }
 
 function workflowBadge(content: string): number {
