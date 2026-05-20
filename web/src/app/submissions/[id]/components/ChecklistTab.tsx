@@ -65,7 +65,11 @@ export default function ChecklistTab({
         body: JSON.stringify(usePaste ? { text: pastedText.trim() } : { url: journalUrl.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Unknown error");
+      if (!res.ok) {
+        setFetchResult({ ok: false, message: data.error || "Unknown error" });
+        if (data.needsPaste) setShowPaste(true);
+        return;
+      }
       // Merge extracted requirements into local state
       const extracted = data.extracted;
       const merged: JournalRequirements = {
@@ -81,14 +85,13 @@ export default function ChecklistTab({
       };
       setReqs(merged);
       onSave(merged);
-      setFetchResult({ ok: true, message: `Requirements fetched${extracted.journal_name ? ` from ${extracted.journal_name}` : ""}` });
+      const name = extracted.journal_name ? ` from ${extracted.journal_name}` : "";
+      setFetchResult({ ok: true, message: `${data.fieldsFound} field${data.fieldsFound !== 1 ? "s" : ""} extracted${name}` });
       setShowPaste(false);
       setPastedText("");
     } catch (e) {
-      const msg = (e as Error).message;
-      setFetchResult({ ok: false, message: msg });
-      // Suggest paste fallback on fetch errors
-      if (msg.includes("403") || msg.includes("fetch")) setShowPaste(true);
+      setFetchResult({ ok: false, message: (e as Error).message });
+      setShowPaste(true);
     }
     setFetching(false);
   }
@@ -145,7 +148,7 @@ export default function ChecklistTab({
             </p>
             {!fetchResult.ok && !showPaste && (
               <button onClick={() => setShowPaste(true)} className="mt-1 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 underline underline-offset-2">
-                Site blocked automatic fetch — paste guidelines text instead
+                Paste the guidelines text instead →
               </button>
             )}
           </div>
