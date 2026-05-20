@@ -38,6 +38,7 @@ export default function AuthorsTab({
   const [localAuthors, setLocalAuthors] = useState<ManuscriptAuthor[]>(authors);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   const fetchCoauthors = useCallback(async () => {
@@ -62,6 +63,7 @@ export default function AuthorsTab({
     const updated = [...localAuthors, { id, order: localAuthors.length + 1, contributions: [] }];
     updateAndSave(updated);
     setShowAdd(false);
+    setAddSearch("");
   }
 
   function removeAuthor(id: string) {
@@ -90,6 +92,12 @@ export default function AuthorsTab({
 
   const sorted = [...localAuthors].sort((a, b) => a.order - b.order);
   const availableToAdd = coauthors.filter((c) => !localAuthors.some((a) => a.id === c.id));
+  const filteredToAdd = addSearch.trim()
+    ? availableToAdd.filter((c) => {
+        const q = addSearch.toLowerCase();
+        return c.name.toLowerCase().includes(q) || c.institution?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q);
+      })
+    : availableToAdd;
 
   // Contributor statement preview
   const statement = sorted
@@ -173,23 +181,43 @@ export default function AuthorsTab({
       {/* Add author */}
       {showAdd ? (
         <div className="border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl p-4">
-          <p className="text-xs text-zinc-500 mb-2">Select a coauthor to add:</p>
           {availableToAdd.length === 0 ? (
             <p className="text-xs text-zinc-400">All coauthors are already added.</p>
           ) : (
-            <div className="space-y-1">
-              {availableToAdd.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => addAuthor(c.id)}
-                  className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  {c.name} <span className="text-xs text-zinc-400">· {c.institution}</span>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="relative mb-3">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                <input
+                  autoFocus
+                  type="text"
+                  value={addSearch}
+                  onChange={(e) => setAddSearch(e.target.value)}
+                  placeholder="Search by name, institution…"
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 ring-zinc-400 placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
+                />
+                {addSearch && (
+                  <button onClick={() => setAddSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  </button>
+                )}
+              </div>
+              <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                {filteredToAdd.length === 0 ? (
+                  <p className="text-xs text-zinc-400 px-3 py-2">No matches for &ldquo;{addSearch}&rdquo;</p>
+                ) : filteredToAdd.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => addAuthor(c.id)}
+                    className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    <span className="font-medium">{c.name}</span>
+                    {c.institution && <span className="text-xs text-zinc-400 ml-2">{c.institution}</span>}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
-          <button onClick={() => setShowAdd(false)} className="text-xs text-zinc-400 hover:text-zinc-600 mt-2">Cancel</button>
+          <button onClick={() => { setShowAdd(false); setAddSearch(""); }} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 mt-3 block">Cancel</button>
         </div>
       ) : (
         <button
