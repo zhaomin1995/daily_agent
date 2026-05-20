@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import AuthorsTab from "./components/AuthorsTab";
 import ChecklistTab from "./components/ChecklistTab";
 import DocumentsTab from "./components/DocumentsTab";
+import FilesTab from "./components/FilesTab";
 
 interface Manuscript {
   id: string;
@@ -36,7 +37,7 @@ interface Manuscript {
   excluded_reviewers: string[];
 }
 
-const tabs = ["Overview", "Authors", "Checklist", "Documents"];
+const tabs = ["Overview", "Authors", "Checklist", "Files", "Documents"];
 
 const statusOptions = ["draft", "submitted", "under_review", "revision", "accepted", "rejected"];
 const typeOptions = ["original", "revision", "resubmission"];
@@ -132,6 +133,40 @@ export default function ManuscriptDetailPage() {
       {/* Tab Content */}
       {activeTab === "Overview" && (
         <div className="space-y-4">
+          {/* Compliance bars — shown when both count and limit are set */}
+          {(() => {
+            const bars = [
+              { label: "Words", value: ms.word_count, max: ms.journal_requirements?.max_words },
+              { label: "Abstract", value: ms.abstract_word_count, max: ms.journal_requirements?.max_abstract_words },
+            ].filter((b) => b.value != null && b.max != null) as { label: string; value: number; max: number }[];
+            if (bars.length === 0) return null;
+            return (
+              <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 space-y-3">
+                <h3 className="text-xs font-medium text-zinc-500">Compliance</h3>
+                {bars.map((b) => {
+                  const pct = Math.min(100, Math.round((b.value / b.max) * 100));
+                  const over = b.value > b.max;
+                  return (
+                    <div key={b.label}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-zinc-500">{b.label}</span>
+                        <span className={over ? "text-red-500 font-medium" : "text-zinc-500"}>
+                          {b.value.toLocaleString()} / {b.max.toLocaleString()} words{over ? " — over limit" : ""}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${over ? "bg-red-500" : pct > 90 ? "bg-amber-400" : "bg-green-500"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Journal">
               <input
@@ -273,6 +308,10 @@ export default function ManuscriptDetailPage() {
             if (Object.keys(updates).length > 0) save(updates);
           }}
         />
+      )}
+
+      {activeTab === "Files" && (
+        <FilesTab manuscriptId={id} />
       )}
 
       {activeTab === "Documents" && (
