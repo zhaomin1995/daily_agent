@@ -1,13 +1,15 @@
 coauthors:
   - id: ly
     name: Lanting Yang
-    credentials: MPH
+    credentials: "PhD, MPH"
     email: layang@health.ucsd.edu
     email_alt: lantingyang2017@gmail.com
     orcid: "0000-0003-0597-9062"
     role: corresponding
-    institution: University of California San Diego
+    institution: "University of California, San Diego"
     department: "Division of Clinical Pharmacy, Skaggs School of Pharmacy and Pharmaceutical Sciences"
+    city: "La Jolla, CA 92093"
+    phone: "412-330-9432"
     contributions: []
 
   - id: ng

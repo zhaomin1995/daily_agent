@@ -12,11 +12,14 @@ export const dynamic = "force-dynamic";
 interface Coauthor {
   id: string;
   name: string;
+  credentials?: string;
   email: string;
-  orcid: string;
+  orcid?: string;
   role: string;
   institution: string;
   department: string;
+  city?: string;
+  phone?: string;
   contributions: string[];
 }
 
@@ -49,7 +52,7 @@ interface Manuscript {
   authors: ManuscriptAuthor[];
   suggested_reviewers?: SuggestedReviewer[];
   excluded_reviewers?: string[];
-  journal_requirements: { checklist_type: string | null };
+  journal_requirements: { checklist_type: string | null; max_figures?: number | null; max_tables?: number | null };
   [key: string]: unknown;
 }
 
@@ -82,7 +85,7 @@ function generateCoverLetter(ms: Manuscript, coauthors: Coauthor[], params: Cove
     .find((c) => c?.role === "corresponding");
 
   const corrName = corresponding?.name || "[Corresponding Author]";
-  const corrCreds = (corresponding as unknown as Record<string,string>)?.credentials || "";
+  const corrCreds = corresponding?.credentials || "";
   const corrEmail = corresponding?.email || "[email]";
   const corrDept = corresponding?.department || "";
   const corrInstitution = corresponding?.institution || "";
@@ -151,7 +154,9 @@ function generateAuthorBlock(ms: Manuscript, coauthors: Coauthor[]): string {
       if (!coauthor) return a.id;
       const indices = authorAffMap.get(a.id) || [];
       const sups = indices.map((i) => superscripts[i] || `${i + 1}`).join("");
-      return `${coauthor.name}${sups}`;
+      return coauthor.credentials
+        ? `${coauthor.name}, ${coauthor.credentials}${sups}`
+        : `${coauthor.name}${sups}`;
     })
     .join(", ");
 
@@ -289,61 +294,126 @@ function generateTitlePage(ms: Manuscript, coauthors: Coauthor[]): string {
   const orderedAuthors = [...(ms.authors || [])].sort((a, b) => a.order - b.order);
   const superscripts = "¹²³⁴⁵⁶⁷⁸⁹";
 
+  // Build affiliation index (deduplicated)
   const affiliations: string[] = [];
   const authorAffMap = new Map<string, number[]>();
   for (const a of orderedAuthors) {
     const co = coauthors.find((c) => c.id === a.id);
     if (!co) continue;
-    const aff = [co.department, co.institution].filter(Boolean).join(", ");
+    // Affiliation = department + institution + city (city on a separate sub-line when printing)
+    const aff = [co.department, co.institution, co.city].filter(Boolean).join(", ");
     let idx = affiliations.indexOf(aff);
     if (idx === -1) { affiliations.push(aff); idx = affiliations.length - 1; }
     authorAffMap.set(a.id, [...(authorAffMap.get(a.id) || []), idx]);
   }
 
+  // Author line: "Name, Cred1, Cred2^n" format matching real papers
   const authorLine = orderedAuthors.map((a) => {
     const co = coauthors.find((c) => c.id === a.id);
     if (!co) return "";
-    const sups = (authorAffMap.get(a.id) || []).map((i) => superscripts[i] || `${i + 1}`).join("");
-    const creds = (co as unknown as Record<string, string>).credentials;
-    return `${co.name}${creds ? `, ${creds}` : ""}${sups}`;
+    const sups = (authorAffMap.get(a.id) || []).map((i) => superscripts[i] ?? `${i + 1}`).join(",");
+    return co.credentials ? `${co.name}, ${co.credentials}${sups}` : `${co.name}${sups}`;
   }).filter(Boolean).join(", ");
 
-  const affLines = affiliations.map((aff, i) => `${superscripts[i] || i + 1} ${aff}`).join("\n");
+  // Affiliations block: "¹ Department, Institution, City"
+  const affLines = affiliations.map((aff, i) => `${superscripts[i] ?? i + 1} ${aff}`).join("\n");
 
+  // Corresponding author
   const corresponding = orderedAuthors
     .map((a) => coauthors.find((c) => c.id === a.id))
     .find((c) => c?.role === "corresponding");
 
-  const parts: string[] = ["TITLE PAGE\n"];
+  const parts: string[] = [];
 
-  parts.push(`Full Title:\n${ms.title || "[Title not set]"}\n`);
-  if (ms.running_title) parts.push(`Running Title:\n${ms.running_title}\n`);
-  parts.push(`Authors:\n${authorLine}\n`);
-  parts.push(`Affiliations:\n${affLines}\n`);
+  // Title
+  parts.push(ms.title || "[Title not set]");
+  parts.push("");
 
-  if (corresponding) {
-    const creds = (corresponding as unknown as Record<string, string>).credentials;
-    const corrBlock = [
-      `${corresponding.name}${creds ? `, ${creds}` : ""}`,
-      corresponding.department,
-      corresponding.institution,
-      `Email: ${corresponding.email}`,
-    ].filter(Boolean).join("\n");
-    parts.push(`Corresponding Author:\n${corrBlock}\n`);
+  // Running title
+  if (ms.running_title) {
+    parts.push(`Running Title: ${ms.running_title}`);
+    parts.push("");
   }
 
-  const counts = [
-    ms.word_count != null ? `Word Count: ${ms.word_count.toLocaleString()} words` : null,
-    ms.abstract_word_count != null ? `Abstract Word Count: ${ms.abstract_word_count.toLocaleString()} words` : null,
-  ].filter(Boolean);
-  if (counts.length) parts.push(counts.join("\n") + "\n");
+  // Authors
+  parts.push(authorLine);
+  parts.push("");
 
-  if (ms.keywords?.length) parts.push(`Keywords:\n${ms.keywords.join(", ")}\n`);
-  if (ms.funding) parts.push(`Funding:\n${ms.funding}\n`);
-  if (ms.conflicts_of_interest) parts.push(`Conflicts of Interest:\n${ms.conflicts_of_interest}\n`);
-  if (ms.irb_statement) parts.push(`Ethics Statement:\n${ms.irb_statement}\n`);
-  if (ms.data_availability) parts.push(`Data Availability:\n${ms.data_availability}\n`);
-  if (ms.acknowledgments) parts.push(`Acknowledgments:\n${ms.acknowledgments}\n`);
+  // Affiliations
+  parts.push("Author Affiliations:");
+  parts.push(affLines);
+  parts.push("");
+
+  // Correspondence block — matches real paper format:
+  // "Correspondence: Name, Dept, Institution, City, Phone; Email: email"
+  if (corresponding) {
+    const corrParts = [
+      corresponding.name + (corresponding.credentials ? `, ${corresponding.credentials}` : ""),
+      corresponding.department,
+      corresponding.institution,
+      corresponding.city,
+    ].filter(Boolean);
+    const phoneEmail = [
+      corresponding.phone,
+      corresponding.email ? `Email: ${corresponding.email}` : null,
+    ].filter(Boolean).join("; ");
+    parts.push(`Correspondence: ${corrParts.join(", ")}${phoneEmail ? `, ${phoneEmail}` : ""}`);
+    parts.push("");
+  }
+
+  // Word counts — "Word counts: main text (X) / abstract (X)" if both, else single line
+  if (ms.word_count != null && ms.abstract_word_count != null) {
+    parts.push(`Word counts: main text (${ms.word_count.toLocaleString()}) / abstract (${ms.abstract_word_count.toLocaleString()})`);
+  } else if (ms.word_count != null) {
+    parts.push(`Word Count: ${ms.word_count.toLocaleString()}`);
+  } else if (ms.abstract_word_count != null) {
+    parts.push(`Abstract Word Count: ${ms.abstract_word_count.toLocaleString()}`);
+  }
+
+  if (ms.journal_requirements?.max_figures != null) {
+    parts.push(`Number of Figures: ${ms.journal_requirements.max_figures}`);
+  }
+  if (ms.word_count != null || ms.abstract_word_count != null) parts.push("");
+
+  // Keywords
+  if (ms.keywords?.length) {
+    parts.push(`Keywords: ${ms.keywords.join(", ")}`);
+    parts.push("");
+  }
+
+  // Funding
+  if (ms.funding) {
+    parts.push("Sources of Funding:");
+    parts.push(ms.funding);
+    parts.push("");
+  }
+
+  // COI
+  if (ms.conflicts_of_interest) {
+    parts.push("Conflict of Interest Disclosure:");
+    parts.push(ms.conflicts_of_interest);
+    parts.push("");
+  }
+
+  // IRB
+  if (ms.irb_statement) {
+    parts.push("Ethics Statement:");
+    parts.push(ms.irb_statement);
+    parts.push("");
+  }
+
+  // Data availability
+  if (ms.data_availability) {
+    parts.push("Data Availability Statement:");
+    parts.push(ms.data_availability);
+    parts.push("");
+  }
+
+  // Acknowledgments
+  if (ms.acknowledgments) {
+    parts.push("Acknowledgments:");
+    parts.push(ms.acknowledgments);
+  }
 
   return parts.join("\n");
 }
