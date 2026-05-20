@@ -43,25 +43,65 @@ function loadManuscript(id: string): Manuscript | null {
   return yaml.load(fs.readFileSync(fp, "utf-8")) as Manuscript;
 }
 
-function generateCoverLetter(ms: Manuscript, coauthors: Coauthor[]): string {
-  const corresponding = ms.authors
+interface CoverLetterParams {
+  editor_name?: string;
+  editor_title?: string;
+  article_type?: string;
+  study_summary?: string;
+  conflicts?: string;
+  phone?: string;
+  date?: string;
+}
+
+function generateCoverLetter(ms: Manuscript, coauthors: Coauthor[], params: CoverLetterParams = {}): string {
+  const sorted = [...(ms.authors || [])].sort((a, b) => a.order - b.order);
+  const corresponding = sorted
     .map((a) => coauthors.find((c) => c.id === a.id))
     .find((c) => c?.role === "corresponding");
 
-  const name = corresponding?.name || "[Corresponding Author]";
-  const email = corresponding?.email || "[email]";
+  const corrName = corresponding?.name || "[Corresponding Author]";
+  const corrCreds = (corresponding as unknown as Record<string,string>)?.credentials || "";
+  const corrEmail = corresponding?.email || "[email]";
+  const corrDept = corresponding?.department || "";
+  const corrInstitution = corresponding?.institution || "";
 
-  return `Dear Editors,
+  const date = params.date || new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const editorName = params.editor_name || "[Editor Name]";
+  const editorTitle = params.editor_title || "Editor-in-Chief";
+  const articleType = params.article_type || (ms as unknown as Record<string,string>).submission_type === "original" ? "an Original Investigation" : "a manuscript";
+  const journal = ms.journal || "[Journal Name]";
+  const title = ms.title || "[Manuscript Title]";
+  const summary = params.study_summary || "[Please summarize the key findings and significance of this work.]";
+  const conflicts = params.conflicts || "There are no conflicts of interest in this study.";
+  const phone = params.phone || "";
 
-We are pleased to submit our manuscript "${ms.title}" for consideration in ${ms.journal || "[Journal Name]"}.
+  // Extract editor last name for salutation
+  const editorLastName = editorName.replace(/^Dr\.?\s+/i, "").split(" ").pop() || editorName;
 
-[Please describe the novelty and significance of this work here.]
+  const signatureLines = [
+    `${corrName}${corrCreds ? `, ${corrCreds}` : ""} (corresponding author)`,
+    corrDept,
+    corrInstitution,
+    `Email: ${corrEmail}`,
+    phone ? `Phone: ${phone}` : "",
+  ].filter(Boolean);
 
-All authors have read and approved the final manuscript. The authors declare no conflicts of interest.
+  return `${date}
+${editorName}
+${editorTitle}
 
-Sincerely,
-${name}
-${email}`;
+Dear Dr. ${editorLastName},
+
+Please kindly find enclosed a manuscript entitled: "${title}", which we are submitting for exclusive consideration of publication as ${articleType} in the ${journal}.
+
+${summary}
+
+This manuscript has not been published or accepted for publication elsewhere and is not currently under consideration for publication elsewhere. All the authors have seen and approved the mention of their names in the manuscript. All the authors have read the manuscript and have approved its submission to the ${journal}. ${conflicts}
+
+We look forward to your review.
+
+Yours sincerely,
+${signatureLines.join("\n")}`;
 }
 
 function generateAuthorBlock(ms: Manuscript, coauthors: Coauthor[]): string {
@@ -233,12 +273,13 @@ export async function POST(
     return Response.json({ error: "Manuscript not found" }, { status: 404 });
   }
 
-  const { type } = await request.json();
+  const body = await request.json();
+  const { type, ...bodyParams } = body;
   const coauthors = loadCoauthors();
 
   switch (type) {
     case "cover-letter":
-      return Response.json({ content: generateCoverLetter(ms, coauthors) });
+      return Response.json({ content: generateCoverLetter(ms, coauthors, bodyParams as CoverLetterParams) });
     case "author-block":
       return Response.json({ content: generateAuthorBlock(ms, coauthors) });
     case "contributor-statement":
