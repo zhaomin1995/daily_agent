@@ -20,14 +20,25 @@ The first (and currently only) tool is **Morning Briefing** — an automated dai
 An interactive tool (`/email-draft` page + `/api/email-draft` route) for composing a new
 email from context in emails you already received. Flow:
 
-1. Search your mailbox via Graph `$search` for context (e.g. "Sherlock X drive access")
+1. Search your mailbox for context (e.g. "Sherlock X drive access")
 2. Check the emails whose details (links, steps, access info) should inform the new message
-3. Describe the intent + recipients + tone; the route fetches the selected message bodies,
-   strips HTML, and drafts subject + body via `claude -p` (JSON out)
-4. Save the result as an Outlook draft via Graph `POST /me/messages` — never sent
+3. Describe the intent + recipients + tone; the route drafts subject + body via `claude -p`
+   (JSON out), grounded in the selected message bodies
+4. Save the result as a draft (never sent) — review and send from your mail client
 
-The API route handles three actions in one POST: `search`, `generate`, `create-draft`.
-Auth reuses the same `~/.claude/msgraph-token-{account}.txt` tokens as the rest of the app.
+Two mailbox providers, selectable in the UI:
+
+- **Apple Mail (default)** — reads/writes Mail.app via `osascript`, the same approach as the
+  Email Debriefing tool. No token needed. Search defaults to the last **7 days** (selectable
+  1/7/30) for speed over a large mailbox; subject+sender by default, with an optional
+  "search body" toggle. Apple Mail search returns message bodies inline, so generate uses
+  them directly. Drafts are created with `make new outgoing message` + `save`.
+- **Outlook (Graph)** — uses `~/.claude/msgraph-token-{account}.txt`; `$search`, then fetches
+  bodies by id, and `POST /me/messages` for the draft.
+
+The API route handles four actions in one POST: `accounts`, `search`, `generate`,
+`create-draft`. Dynamic values are passed to AppleScript via env vars read with
+`system attribute` (injection-safe), not string interpolation.
 
 ## Repo structure
 

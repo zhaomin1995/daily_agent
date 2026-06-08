@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /* ------------------------------------------------------------------ *
  * Email Draft Assistant
  *
  * Flow:
- *  1. Pick an account and search your received emails for context
- *     (e.g. "Sherlock X drive access").
+ *  1. Search emails you received (Apple Mail by default, last 7 days) for
+ *     context — e.g. "Sherlock X drive access".
  *  2. Check the emails whose details should inform the new message.
  *  3. Describe what you want to say + who it goes to, then generate.
- *  4. Edit the draft and save it to Outlook Drafts (never auto-sent).
+ *  4. Edit the draft and save it to Drafts (never auto-sent).
  * ------------------------------------------------------------------ */
 
 interface EmailMatch {
@@ -20,26 +20,43 @@ interface EmailMatch {
   fromEmail: string;
   receivedDateTime: string;
   bodyPreview: string;
+  account?: string;
+  body?: string; // full (capped) text, present for the Apple Mail provider
 }
 
-const ACCOUNTS = [
-  { id: "ucsd", label: "UCSD" },
-  { id: "pitt", label: "Pitt" },
-];
+interface MailAccount {
+  name: string;
+  email: string;
+}
 
 const TONES = ["warm and professional", "concise and direct", "formal"];
 
-function formatDate(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
+const DAY_OPTIONS = [
+  { label: "1 day", value: 1 },
+  { label: "7 days", value: 7 },
+  { label: "30 days", value: 30 },
+];
+
+function formatDate(s: string): string {
+  if (!s) return "";
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s.split(" at ")[0] || s; // Apple Mail date strings
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export default function EmailDraftPage() {
-  const [account, setAccount] = useState("ucsd");
+  // Provider: Apple Mail (default, no token) or Outlook (Graph).
+  const [provider, setProvider] = useState<"applemail" | "graph">("applemail");
+
+  // Apple Mail accounts (for the "From" address on the draft).
+  const [mailAccounts, setMailAccounts] = useState<MailAccount[]>([]);
+  const [fromEmail, setFromEmail] = useState("");
+  const [graphAccount, setGraphAccount] = useState("ucsd");
 
   // Context search
   const [query, setQuery] = useState("");
+  const [days, setDays] = useState(7);
+  const [deep, setDeep] = useState(false);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<EmailMatch[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -57,10 +74,31 @@ export default function EmailDraftPage() {
   const [draftBody, setDraftBody] = useState("");
   const [genError, setGenError] = useState<string | null>(null);
 
-  // Save-to-Outlook state
+  // Save state
   const [saving, setSaving] = useState(false);
-  const [savedLink, setSavedLink] = useState<string | null>(null);
+  const [saved, setSaved] = useState<{ link?: string } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Load Apple Mail accounts when that provider is active.
+  useEffect(() => {
+    if (provider !== "applemail") return;
+    (async () => {
+      try {
+        const res = await fetch("/api/email-draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "accounts", provider: "applemail" }),
+        });
+        const data = await res.json();
+        const accts: MailAccount[] = (data.accounts || []).filter((a: MailAccount) => a.email);
+        setMailAccounts(accts);
+        if (accts.length && !fromEmail) setFromEmail(accts[0].email);
+      } catch {
+        /* accounts are optional; sender just stays blank */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider]);
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -76,11 +114,19 @@ export default function EmailDraftPage() {
     setSearching(true);
     setSearchError(null);
     setResults(null);
+    setSelected(new Set());
     try {
       const res = await fetch("/api/email-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "search", account, query }),
+        body: JSON.stringify({
+          action: "search",
+          provider,
+          account: graphAccount,
+          query,
+          days,
+          deep,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Search failed");
@@ -96,15 +142,27 @@ export default function EmailDraftPage() {
     if (!intent.trim()) return;
     setGenerating(true);
     setGenError(null);
-    setSavedLink(null);
+    setSaved(null);
     try {
+      // Apple Mail results carry their body inline; pass it straight through.
+      const chosen = (results || []).filter((m) => selected.has(m.id));
+      const contextEmails = chosen.map((m) => ({
+        subject: m.subject,
+        from: m.fromName || m.fromEmail,
+        date: m.receivedDateTime,
+        text: m.body || m.bodyPreview,
+      }));
+
       const res = await fetch("/api/email-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "generate",
-          account,
-          messageIds: Array.from(selected),
+          provider,
+          account: graphAccount,
+          // Graph has no inline body, so fall back to ids there.
+          messageIds: provider === "graph" ? Array.from(selected) : undefined,
+          contextEmails: provider === "applemail" ? contextEmails : undefined,
           intent,
           recipients,
           extraContext,
@@ -122,18 +180,20 @@ export default function EmailDraftPage() {
     }
   }
 
-  async function saveToOutlook() {
+  async function saveDraft() {
     if (!draftBody.trim()) return;
     setSaving(true);
     setSaveError(null);
-    setSavedLink(null);
+    setSaved(null);
     try {
       const res = await fetch("/api/email-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "create-draft",
-          account,
+          provider,
+          account: graphAccount,
+          sender: provider === "applemail" ? fromEmail : undefined,
           subject: draftSubject,
           body: draftBody,
           recipients,
@@ -141,7 +201,7 @@ export default function EmailDraftPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save draft");
-      setSavedLink(data.webLink || "");
+      setSaved({ link: data.webLink });
     } catch (e) {
       setSaveError((e as Error).message);
     } finally {
@@ -151,39 +211,70 @@ export default function EmailDraftPage() {
 
   const inputCls =
     "w-full px-3 py-2 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 ring-zinc-400";
+  const draftTarget = provider === "applemail" ? "Apple Mail Drafts" : "Outlook Drafts";
 
   return (
     <div className="p-4 sm:p-8 max-w-3xl">
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Email Draft Assistant</h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Search emails you received, then draft a new email that reuses their details. Saves to Outlook Drafts — never sends.
+          Search emails you received, then draft a new one that reuses their details. Saves to {draftTarget} — never sends.
         </p>
       </div>
 
-      {/* Account selector */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Account</span>
-        <div className="flex gap-1.5">
-          {ACCOUNTS.map((acc) => (
-            <button
-              key={acc.id}
-              onClick={() => { setAccount(acc.id); setResults(null); setSelected(new Set()); }}
-              className={`px-3 py-1 text-xs font-medium rounded-lg border transition-colors ${
-                account === acc.id
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-900 dark:border-zinc-100"
-                  : "border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-              }`}
-            >
-              {acc.label}
-            </button>
-          ))}
+      {/* Provider + From row */}
+      <div className="flex flex-wrap items-end gap-4 mb-4">
+        <div>
+          <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Mailbox</p>
+          <div className="flex gap-1.5">
+            {([
+              { id: "applemail", label: "Apple Mail" },
+              { id: "graph", label: "Outlook (Graph)" },
+            ] as const).map((p) => (
+              <button
+                key={p.id}
+                onClick={() => { setProvider(p.id); setResults(null); setSelected(new Set()); }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                  provider === p.id
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-900 dark:border-zinc-100"
+                    : "border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* From account */}
+        {provider === "applemail" ? (
+          mailAccounts.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">From</p>
+              <select value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} className={inputCls}>
+                {mailAccounts.map((a) => (
+                  <option key={a.email} value={a.email}>
+                    {a.name} ({a.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )
+        ) : (
+          <div>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">Account</p>
+            <select value={graphAccount} onChange={(e) => setGraphAccount(e.target.value)} className={inputCls}>
+              <option value="ucsd">UCSD</option>
+              <option value="pitt">Pitt</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Step 1: find context emails */}
       <div className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 mb-4 space-y-3">
         <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">1 · Find context emails</p>
+
         <div className="flex gap-2">
           <input
             type="text"
@@ -207,22 +298,45 @@ export default function EmailDraftPage() {
           </button>
         </div>
 
+        {/* Search options: time window + deep toggle (Apple Mail) */}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-zinc-400">Window</span>
+            {DAY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setDays(opt.value)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                  days === opt.value
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-zinc-900 dark:border-zinc-100"
+                    : "border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {provider === "applemail" && (
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={deep} onChange={(e) => setDeep(e.target.checked)} className="rounded" />
+              <span className="text-xs text-zinc-500">Also search email body (slower)</span>
+            </label>
+          )}
+        </div>
+
         {searchError && (
           <div className="p-3 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30">
             <p className="text-sm text-red-600 dark:text-red-400">{searchError}</p>
-            <p className="text-xs text-red-500 mt-1">Check your token in <a href="/config" className="underline">Config</a>.</p>
           </div>
         )}
 
         {results && results.length === 0 && (
-          <p className="text-sm text-zinc-400">No matching emails found. Try different keywords.</p>
+          <p className="text-sm text-zinc-400">No matching emails in the last {days} day{days !== 1 ? "s" : ""}. Try a wider window or the body-search option.</p>
         )}
 
         {results && results.length > 0 && (
           <div className="space-y-1.5">
-            <p className="text-xs text-zinc-400">
-              {selected.size} of {results.length} selected as context
-            </p>
+            <p className="text-xs text-zinc-400">{selected.size} of {results.length} selected as context</p>
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
               {results.map((m) => (
                 <label key={m.id} className="flex gap-3 px-3 py-2.5 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900">
@@ -237,9 +351,7 @@ export default function EmailDraftPage() {
                       <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">{m.subject}</span>
                       <span className="text-[11px] text-zinc-400 shrink-0">{formatDate(m.receivedDateTime)}</span>
                     </div>
-                    <p className="text-xs text-zinc-500 truncate">
-                      {m.fromName || m.fromEmail}
-                    </p>
+                    <p className="text-xs text-zinc-500 truncate">{m.fromName || m.fromEmail}</p>
                     <p className="text-xs text-zinc-400 line-clamp-2 mt-0.5">{m.bodyPreview}</p>
                   </div>
                 </label>
@@ -321,12 +433,7 @@ export default function EmailDraftPage() {
           <div className="p-4 space-y-3">
             <div>
               <label className="block text-xs text-zinc-500 mb-1">Subject</label>
-              <input
-                type="text"
-                value={draftSubject}
-                onChange={(e) => setDraftSubject(e.target.value)}
-                className={inputCls}
-              />
+              <input type="text" value={draftSubject} onChange={(e) => setDraftSubject(e.target.value)} className={inputCls} />
             </div>
             <div>
               <label className="block text-xs text-zinc-500 mb-1">Body</label>
@@ -340,7 +447,7 @@ export default function EmailDraftPage() {
 
             <div className="flex items-center gap-3">
               <button
-                onClick={saveToOutlook}
+                onClick={saveDraft}
                 disabled={saving || !draftBody.trim()}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90 disabled:opacity-40 transition-opacity"
               >
@@ -349,7 +456,7 @@ export default function EmailDraftPage() {
                     <circle cx="12" cy="12" r="10" strokeOpacity="0.25" /><path d="M12 2a10 10 0 0 1 10 10" />
                   </svg>
                 )}
-                {saving ? "Saving…" : "Save to Outlook Drafts"}
+                {saving ? "Saving…" : `Save to ${draftTarget}`}
               </button>
               <button
                 onClick={() => navigator.clipboard.writeText(`${draftSubject}\n\n${draftBody}`)}
@@ -359,10 +466,10 @@ export default function EmailDraftPage() {
               </button>
             </div>
 
-            {savedLink !== null && (
+            {saved && (
               <p className="text-sm text-green-600 dark:text-green-400">
-                Draft saved to Outlook — review and send it from there.{" "}
-                {savedLink && <a href={savedLink} target="_blank" rel="noopener noreferrer" className="underline">Open draft</a>}
+                Draft saved to {draftTarget} — review and send it from there.{" "}
+                {saved.link && <a href={saved.link} target="_blank" rel="noopener noreferrer" className="underline">Open draft</a>}
               </p>
             )}
             {saveError && <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>}
