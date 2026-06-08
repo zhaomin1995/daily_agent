@@ -1,0 +1,11 @@
+# macOS junk
+.DS_Store
+
+# Runtime data written by the app (manuscripts, uploaded files, metadata).
+# This is user research data, not source code — keep it out of git.
+/submissions/
+
+# Briefing outputs and action-item state live outside the repo (~/morning-brief),
+# but ignore them here too in case they ever land in the tree.
+/morning-brief/
+.action-items-state.json
