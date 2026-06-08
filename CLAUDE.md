@@ -15,6 +15,20 @@ The first (and currently only) tool is **Morning Briefing** — an automated dai
 7. Saves a structured markdown briefing to ~/morning-brief/{date}.md
 8. Creates draft replies via Graph API (never sends automatically)
 
+## Email Draft Assistant
+
+An interactive tool (`/email-draft` page + `/api/email-draft` route) for composing a new
+email from context in emails you already received. Flow:
+
+1. Search your mailbox via Graph `$search` for context (e.g. "Sherlock X drive access")
+2. Check the emails whose details (links, steps, access info) should inform the new message
+3. Describe the intent + recipients + tone; the route fetches the selected message bodies,
+   strips HTML, and drafts subject + body via `claude -p` (JSON out)
+4. Save the result as an Outlook draft via Graph `POST /me/messages` — never sent
+
+The API route handles three actions in one POST: `search`, `generate`, `create-draft`.
+Auth reuses the same `~/.claude/msgraph-token-{account}.txt` tokens as the rest of the app.
+
 ## Repo structure
 
 ```

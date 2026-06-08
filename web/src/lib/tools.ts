@@ -53,6 +53,17 @@ export const tools: Tool[] = [
     href: "/availability",
   },
   {
+    id: "email-draft",
+    name: "Email Draft Assistant",
+    description:
+      "Search emails you received for context (instructions, links, access info), then draft a new email that reuses those details. Saves to Outlook Drafts — never sends.",
+    script: "",
+    category: "Daily",
+    schedule: null,
+    type: "link",
+    href: "/email-draft",
+  },
+  {
     id: "references",
     name: "Reference Generator",
     description:
