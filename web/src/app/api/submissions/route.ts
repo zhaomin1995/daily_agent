@@ -24,11 +24,14 @@ export async function GET() {
 export async function POST(request: Request) {
   ensureDir();
   const body = await request.json();
-  const id = body.id || `manuscript-${Date.now()}`;
+  const kind = body.submission_kind === "abstract" ? "abstract" : "manuscript";
+  const id = body.id || `${kind}-${Date.now()}`;
   const filePath = path.join(SUBMISSIONS_DIR, `${id}.yaml`);
 
   const defaultManuscript = {
     id,
+    submission_kind: "manuscript",
+    project_label: body.project_label || "",
     title: body.title || "Untitled Manuscript",
     journal: body.journal || "",
     journal_abbrev: "",
@@ -59,6 +62,25 @@ export async function POST(request: Request) {
     notes: "",
   };
 
-  fs.writeFileSync(filePath, yaml.dump({ ...defaultManuscript, ...body, id }));
+  const defaultAbstract = {
+    id,
+    submission_kind: "abstract",
+    project_label: body.project_label || "",
+    title: body.title || "Untitled Abstract",
+    conference: "",
+    conference_abbrev: "",
+    presentation_type: "poster",
+    status: "draft",
+    deadline: null,
+    submitted_date: null,
+    decision_date: null,
+    word_count: null,
+    word_limit: null,
+    authors: body.authors || [],
+    notes: "",
+  };
+
+  const defaults = kind === "abstract" ? defaultAbstract : defaultManuscript;
+  fs.writeFileSync(filePath, yaml.dump({ ...defaults, ...body, id, submission_kind: kind }));
   return Response.json({ ok: true, id });
 }

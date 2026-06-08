@@ -90,7 +90,7 @@ export async function GET() {
     ...t,
     status: getToolStatus(t.id),
     lastRun: getLastRun(t.id),
-    badge: getBadgeCount(t.id),
+    badge: null, // counts shown in SnapshotPanel instead
   }));
   return Response.json(result);
 }

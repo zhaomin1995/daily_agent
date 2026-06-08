@@ -441,6 +441,79 @@ function generateSuggestedReviewers(ms: Manuscript): string {
   return lines.join("\n");
 }
 
+async function extractFileText(filePath: string): Promise<string> {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".docx" || ext === ".doc") {
+    const { stdout } = await execAsync(`textutil -convert txt -stdout "${filePath.replace(/"/g, '\\"')}"`, { timeout: 30000 });
+    return stdout;
+  }
+  if (ext === ".pdf") {
+    const { stdout } = await execAsync(`pdftotext "${filePath.replace(/"/g, '\\"')}" -`, { timeout: 30000 });
+    return stdout;
+  }
+  return fs.readFileSync(filePath, "utf-8");
+}
+
+async function generateAbbreviationList(text: string): Promise<string> {
+  const prompt = `Extract all abbreviations from this academic manuscript. Return ONLY a plain text list, one per line in this exact format:
+ABBREVIATION — Full Term
+
+Rules:
+- Include abbreviations that are defined or used in the text (medical terms, statistical terms, study-design terms, drug names, database names, etc.)
+- Sort alphabetically by abbreviation
+- Do not include common words: e.g., i.e., vs., et al., Fig., No.
+- Do not add any introduction, header, or explanation — just the list
+
+MANUSCRIPT TEXT:
+${text.slice(0, 20000)}`;
+
+  const escaped = prompt.replace(/'/g, "'\\''");
+  const { stdout } = await execAsync(`claude -p '${escaped}'`, { timeout: 90000, maxBuffer: 5 * 1024 * 1024 });
+  return stdout.trim();
+}
+
+async function generateDiffResponse(ms: Manuscript, reviewerComments: string, origText: string, revText: string): Promise<string> {
+  const prompt = `You are helping an academic researcher write a point-by-point response to peer reviewers for a journal revision.
+
+Manuscript title: "${ms.title || "the manuscript"}"
+Journal: ${ms.journal || "the journal"}
+
+REVIEWER / EDITOR COMMENTS:
+${reviewerComments}
+
+ORIGINAL MANUSCRIPT (excerpted):
+${origText.slice(0, 8000)}
+
+REVISED MANUSCRIPT (excerpted):
+${revText.slice(0, 8000)}
+
+Instructions:
+1. Write a professional opening paragraph thanking the editors and reviewers and summarizing that the manuscript has been substantially revised.
+2. For each comment (numbered, per reviewer), generate a complete response entry:
+
+REVIEWER [N], COMMENT [N]:
+> [Quote the reviewer comment verbatim]
+
+Response:
+Thank you for this comment. [Write a 2–4 sentence substantive response based on what actually changed between the original and revised manuscripts. Be specific about what was added, removed, or clarified. Reference the section/location if identifiable from the diff.]
+
+Manuscript Change:
+[Describe the specific edit made, e.g., "We revised the Methods section to add..." or "We added a sentence in the Discussion reading: '...'". Quote new text when relevant.]
+
+---
+
+Response letter patterns to follow:
+- Always open responses with "Thank you for..."
+- Be specific about changes (section name, what was added/removed/revised)
+- When a change was made, quote the new text inline if concise
+- If a comment required no change, explain why clearly and politely
+- Use "EDITOR COMMENTS" as a section header for editor-level comments`;
+
+  const escaped = prompt.replace(/'/g, "'\\''");
+  const { stdout } = await execAsync(`claude -p '${escaped}'`, { timeout: 180000, maxBuffer: 10 * 1024 * 1024 });
+  return stdout.trim();
+}
+
 async function generateReviewerResponse(ms: Manuscript, reviewerComments: string): Promise<string> {
   const prompt = `You are helping an academic researcher write a response to peer reviewer comments for a journal submission.
 
@@ -503,10 +576,57 @@ export async function POST(
       return Response.json({ content: generateTitlePage(ms, coauthors) });
     case "suggested-reviewers":
       return Response.json({ content: generateSuggestedReviewers(ms) });
+    case "running-title": {
+      const { full_title } = bodyParams as { full_title?: string };
+      if (!full_title?.trim()) return Response.json({ error: "full_title required" }, { status: 400 });
+      const p = `Generate a concise running title (short title) for this academic manuscript. The running title should be ≤50 characters, capture the key topic, and follow standard academic style. Return ONLY the running title text, nothing else.\n\nFull title: "${full_title}"`;
+      const escaped = p.replace(/'/g, "'\\''");
+      const { stdout } = await execAsync(`claude -p '${escaped}'`, { timeout: 30000, maxBuffer: 1024 * 1024 });
+      return Response.json({ content: stdout.trim().replace(/^["']|["']$/g, "") });
+    }
+    case "journal-abbrev": {
+      const { journal_name } = bodyParams as { journal_name?: string };
+      if (!journal_name?.trim()) return Response.json({ error: "journal_name required" }, { status: 400 });
+      const p = `Return ONLY the standard NLM/MEDLINE abbreviated journal title for: "${journal_name}". No explanation, no punctuation at end, just the abbreviation. Example input: "Journal of the American Medical Association" → "JAMA". Example input: "New England Journal of Medicine" → "N Engl J Med".`;
+      const escaped = p.replace(/'/g, "'\\''");
+      const { stdout } = await execAsync(`claude -p '${escaped}'`, { timeout: 30000, maxBuffer: 1024 * 1024 });
+      return Response.json({ abbrev: stdout.trim().replace(/\.$/, "") });
+    }
     case "reviewer-response": {
       const { reviewer_comments } = bodyParams as { reviewer_comments?: string };
       if (!reviewer_comments?.trim()) return Response.json({ error: "reviewer_comments required" }, { status: 400 });
       const content = await generateReviewerResponse(ms, reviewer_comments);
+      return Response.json({ content });
+    }
+    case "reviewer-response-diff": {
+      const { reviewer_comments, filename_original, filename_revised } = bodyParams as {
+        reviewer_comments?: string; filename_original?: string; filename_revised?: string;
+      };
+      if (!reviewer_comments?.trim()) return Response.json({ error: "reviewer_comments required" }, { status: 400 });
+      if (!filename_original || !filename_revised) return Response.json({ error: "filename_original and filename_revised required" }, { status: 400 });
+      const origPath = path.join(SUBMISSIONS_DIR, "files", id, filename_original);
+      const revPath = path.join(SUBMISSIONS_DIR, "files", id, filename_revised);
+      if (!fs.existsSync(origPath)) return Response.json({ error: `Original file not found: ${filename_original}` }, { status: 404 });
+      if (!fs.existsSync(revPath)) return Response.json({ error: `Revised file not found: ${filename_revised}` }, { status: 404 });
+      let origText: string, revText: string;
+      try {
+        origText = await extractFileText(origPath);
+        revText = await extractFileText(revPath);
+      } catch (e) {
+        return Response.json({ error: `Text extraction failed: ${(e as Error).message}` }, { status: 422 });
+      }
+      const content = await generateDiffResponse(ms, reviewer_comments, origText, revText);
+      return Response.json({ content });
+    }
+    case "abbreviations": {
+      const { filename } = bodyParams as { filename?: string };
+      if (!filename) return Response.json({ error: "filename required" }, { status: 400 });
+      const filePath = path.join(SUBMISSIONS_DIR, "files", id, filename);
+      if (!fs.existsSync(filePath)) return Response.json({ error: "File not found" }, { status: 404 });
+      let text: string;
+      try { text = await extractFileText(filePath); }
+      catch (e) { return Response.json({ error: `Text extraction failed: ${(e as Error).message}` }, { status: 422 }); }
+      const content = await generateAbbreviationList(text);
       return Response.json({ content });
     }
     default:

@@ -20,3 +20,20 @@ export async function GET(
   const content = fs.readFileSync(filePath, "utf-8");
   return Response.json({ date, content });
 }
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ date: string }> }
+) {
+  const { date } = await params;
+  const { content } = await request.json() as { content: string };
+  if (typeof content !== "string") {
+    return Response.json({ error: "content required" }, { status: 400 });
+  }
+  const filePath = path.join(BRIEFING_DIR, `${date}.md`);
+  if (!fs.existsSync(filePath)) {
+    return Response.json({ error: "Log not found" }, { status: 404 });
+  }
+  fs.writeFileSync(filePath, content, "utf-8");
+  return Response.json({ ok: true });
+}

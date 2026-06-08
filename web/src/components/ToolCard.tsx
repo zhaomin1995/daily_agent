@@ -19,6 +19,8 @@ interface ToolCardProps {
   schedule: string | null;
   badge: number | null;
   index: number;
+  type?: "script" | "link";
+  href?: string;
 }
 
 function formatRelativeTime(iso: string): string {
@@ -42,7 +44,7 @@ function formatElapsed(seconds: number): string {
 
 const DESC_CLAMP = 120;
 
-export default function ToolCard({ id, name, description, script, category, status, lastRun, schedule, badge, index }: ToolCardProps) {
+export default function ToolCard({ id, name, description, script, category, status, lastRun, schedule, badge, index, type = "script", href }: ToolCardProps) {
   const [running, setRunning] = useState(false);
   const [stdout, setStdout] = useState("");
   const [stderr, setStderr] = useState("");
@@ -247,20 +249,29 @@ export default function ToolCard({ id, name, description, script, category, stat
             <RunSparkline toolId={id} />
           </div>
           <div className="flex items-center gap-2">
-            {cancelledId && (
-              <button onClick={handleUndoCancel} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors">
-                Undo
-              </button>
-            )}
-            {running ? (
-              <button onClick={handleCancel} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
-                Stop
-              </button>
+            {type === "link" ? (
+              <Link href={href || "/"} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90 transition-opacity flex items-center gap-1.5">
+                Open
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </Link>
             ) : (
-              <button onClick={handleRun} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:opacity-90 transition-opacity active:scale-95">
-                Run
-              </button>
+              <>
+                {cancelledId && (
+                  <button onClick={handleUndoCancel} className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors">
+                    Undo
+                  </button>
+                )}
+                {running ? (
+                  <button onClick={handleCancel} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-500 transition-colors flex items-center justify-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1" /></svg>
+                    Stop
+                  </button>
+                ) : (
+                  <button onClick={handleRun} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:opacity-90 transition-opacity active:scale-95">
+                    Run
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>

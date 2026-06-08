@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface CoverLetterFields {
   editor_name: string;
@@ -26,6 +26,11 @@ interface SimpleDoc {
   description: string;
 }
 
+interface ManuscriptFile {
+  name: string;
+  category: string;
+}
+
 const simpleDocs: SimpleDoc[] = [
   { type: "title-page", title: "Title Page", description: "Full title page with authors, affiliations, word counts, funding, IRB, and data availability." },
   { type: "author-block", title: "Author Block", description: "Formatted author list with numbered affiliations and corresponding author line." },
@@ -42,6 +47,18 @@ export default function DocumentsTab({ manuscriptId }: { manuscriptId: string })
   const [showCLForm, setShowCLForm] = useState(false);
   const [reviewerComments, setReviewerComments] = useState("");
   const [showRRForm, setShowRRForm] = useState(true);
+  const [diffMode, setDiffMode] = useState(false);
+  const [filenameOriginal, setFilenameOriginal] = useState("");
+  const [filenameRevised, setFilenameRevised] = useState("");
+  const [abbrevFile, setAbbrevFile] = useState("");
+  const [files, setFiles] = useState<ManuscriptFile[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/submissions/${manuscriptId}/files`)
+      .then((r) => r.json())
+      .then((data) => setFiles(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [manuscriptId]);
 
   async function generate(type: string, extra: Record<string, string> = {}) {
     setLoading((prev) => ({ ...prev, [type]: true }));
@@ -167,7 +184,11 @@ export default function DocumentsTab({ manuscriptId }: { manuscriptId: string })
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
             <h3 className="text-sm font-semibold">Reviewer Response Letter</h3>
-            <p className="text-xs text-zinc-500 mt-0.5">Point-by-point response template. Paste the decision letter with reviewer comments below.</p>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {diffMode
+                ? "Diff mode: compares original vs. revised manuscript to auto-populate each response."
+                : "Template mode: generates a structured point-by-point template to fill in."}
+            </p>
           </div>
           <button
             onClick={() => setShowRRForm(!showRRForm)}
@@ -178,36 +199,121 @@ export default function DocumentsTab({ manuscriptId }: { manuscriptId: string })
         </div>
 
         {showRRForm && (
-          <div className="mb-4">
-            <label className="block text-xs text-zinc-500 mb-1">
-              Reviewer Comments <span className="text-red-400">*</span>
-              <span className="ml-1 text-zinc-400 font-normal">(paste the full decision letter)</span>
-            </label>
-            <textarea
-              value={reviewerComments}
-              onChange={(e) => setReviewerComments(e.target.value)}
-              placeholder={"Dear Dr. Yang,\n\nThank you for submitting your manuscript...\n\nREVIEWER 1\n1. The authors should clarify..."}
-              rows={8}
-              className="field-input resize-y min-h-[140px] font-mono text-xs"
-            />
+          <div className="space-y-3 mb-4">
+            {/* Mode toggle */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-zinc-500">Mode:</span>
+              <button
+                onClick={() => setDiffMode(false)}
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${!diffMode ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100" : "border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800"}`}
+              >
+                Template
+              </button>
+              <button
+                onClick={() => setDiffMode(true)}
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${diffMode ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100" : "border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800"}`}
+              >
+                Diff (auto-populate)
+              </button>
+            </div>
+
+            {diffMode && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg border border-zinc-100 dark:border-zinc-800">
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1">Original manuscript <span className="text-red-400">*</span></label>
+                  <select value={filenameOriginal} onChange={(e) => setFilenameOriginal(e.target.value)} className="field-input text-xs">
+                    <option value="">— select file —</option>
+                    {files.map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1">Revised manuscript <span className="text-red-400">*</span></label>
+                  <select value={filenameRevised} onChange={(e) => setFilenameRevised(e.target.value)} className="field-input text-xs">
+                    <option value="">— select file —</option>
+                    {files.map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1">
+                Decision letter / Reviewer comments <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                value={reviewerComments}
+                onChange={(e) => setReviewerComments(e.target.value)}
+                placeholder={"Dear Dr. Yang,\n\nThank you for submitting your manuscript...\n\nREVIEWER 1\n1. The authors should clarify..."}
+                rows={8}
+                className="field-input resize-y min-h-[140px] font-mono text-xs"
+              />
+            </div>
           </div>
         )}
 
         <button
-          onClick={() => generate("reviewer-response", { reviewer_comments: reviewerComments })}
-          disabled={loading["reviewer-response"] || !reviewerComments.trim()}
+          onClick={() => {
+            const key = diffMode ? "reviewer-response-diff" : "reviewer-response";
+            const extra: Record<string, string> = diffMode
+              ? { reviewer_comments: reviewerComments, filename_original: filenameOriginal, filename_revised: filenameRevised }
+              : { reviewer_comments: reviewerComments };
+            generate(key, extra);
+          }}
+          disabled={
+            loading["reviewer-response"] || loading["reviewer-response-diff"] ||
+            !reviewerComments.trim() ||
+            (diffMode && (!filenameOriginal || !filenameRevised))
+          }
           className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50"
         >
-          {loading["reviewer-response"] ? "Generating…" : "Generate Response Template"}
+          {(loading["reviewer-response"] || loading["reviewer-response-diff"])
+            ? "Generating…"
+            : diffMode ? "Generate Auto-Populated Response" : "Generate Response Template"}
         </button>
 
-        {results["reviewer-response"] && (
+        {(results["reviewer-response"] || results["reviewer-response-diff"]) && (() => {
+          const key = results["reviewer-response-diff"] ? "reviewer-response-diff" : "reviewer-response";
+          return (
+            <ResultBlock
+              type={key}
+              content={results[key]}
+              copied={copied[key]}
+              onCopy={() => copyToClipboard(key, results[key])}
+              onDownload={() => downloadAsTxt(results[key], "reviewer-response.txt")}
+            />
+          );
+        })()}
+      </div>
+
+      {/* Abbreviation List */}
+      <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <h3 className="text-sm font-semibold">Abbreviation List</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">Extract all abbreviations used in the manuscript, sorted alphabetically.</p>
+          </div>
+        </div>
+        <div className="mb-3">
+          <label className="block text-xs text-zinc-500 mb-1">Manuscript file <span className="text-red-400">*</span></label>
+          <select value={abbrevFile} onChange={(e) => setAbbrevFile(e.target.value)} className="field-input text-xs">
+            <option value="">— select file —</option>
+            {files.map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+          </select>
+        </div>
+        <button
+          onClick={() => generate("abbreviations", { filename: abbrevFile })}
+          disabled={loading["abbreviations"] || !abbrevFile}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50"
+        >
+          {loading["abbreviations"] ? "Extracting…" : "Generate"}
+        </button>
+        {results["abbreviations"] && (
           <ResultBlock
-            type="reviewer-response"
-            content={results["reviewer-response"]}
-            copied={copied["reviewer-response"]}
-            onCopy={() => copyToClipboard("reviewer-response", results["reviewer-response"])}
-            onDownload={() => downloadAsTxt(results["reviewer-response"], "reviewer-response.txt")}
+            type="abbreviations"
+            content={results["abbreviations"]}
+            copied={copied["abbreviations"]}
+            onCopy={() => copyToClipboard("abbreviations", results["abbreviations"])}
+            onDownload={() => downloadAsTxt(results["abbreviations"], "abbreviations.txt")}
           />
         )}
       </div>

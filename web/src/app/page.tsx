@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ToolCard from "@/components/ToolCard";
 import SkeletonCard from "@/components/Skeleton";
 import PullToRefresh from "@/components/PullToRefresh";
-import ActionItems from "@/components/ActionItems";
 import StatsBar from "@/components/StatsBar";
 import SnapshotPanel from "@/components/SnapshotPanel";
 
@@ -102,7 +101,6 @@ export default function Dashboard() {
         )}
 
         <SnapshotPanel />
-        <ActionItems />
 
         {!loading && tools.length > 0 && (
           <div className="mb-4">

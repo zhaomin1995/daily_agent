@@ -102,6 +102,13 @@ function matchAuthors(
       if (byLastName.length === 1) co = byLastName[0];
     }
 
+    // Final fallback: coauthor's known name appears as substring in raw extracted string
+    if (!co) {
+      co = coauthors.find((c) =>
+        authorNames[i].toLowerCase().includes(c.name.toLowerCase())
+      );
+    }
+
     if (co) {
       matched.push({ id: co.id, name: co.name, order: i + 1 });
     } else {

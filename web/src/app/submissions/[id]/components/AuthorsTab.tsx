@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+interface Affiliation {
+  institution: string;
+  department?: string;
+  city?: string;
+}
 
 interface Coauthor {
   id: string;
@@ -10,12 +16,38 @@ interface Coauthor {
   role: string;
   institution: string;
   department: string;
+  affiliations?: Affiliation[];
 }
 
 interface ManuscriptAuthor {
   id: string;
   order: number;
   contributions: string[];
+}
+
+function CopyField({ value, className }: { value: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function copy() {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <button
+      onClick={copy}
+      title={`Copy: ${value}`}
+      className={`group inline-flex items-center gap-1 text-left transition-colors hover:text-zinc-900 dark:hover:text-zinc-100 ${className}`}
+    >
+      <span>{copied ? <span className="text-green-500">Copied!</span> : value}</span>
+      <svg className="shrink-0 opacity-0 group-hover:opacity-40 transition-opacity" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+    </button>
+  );
 }
 
 const CREDIT_ROLES = [
@@ -39,7 +71,7 @@ export default function AuthorsTab({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [addSearch, setAddSearch] = useState("");
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   const fetchCoauthors = useCallback(async () => {
     const res = await fetch("/api/coauthors");
@@ -82,12 +114,14 @@ export default function AuthorsTab({
     updateAndSave(updated);
   }
 
-  function reorder(from: number, to: number) {
-    if (from === to) return;
-    const updated = [...localAuthors];
-    const [moved] = updated.splice(from, 1);
-    updated.splice(to, 0, moved);
-    updateAndSave(updated.map((a, i) => ({ ...a, order: i + 1 })));
+  function reorder(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    const s = [...sorted];
+    const fromIdx = s.findIndex((a) => a.id === fromId);
+    const toIdx = s.findIndex((a) => a.id === toId);
+    const [moved] = s.splice(fromIdx, 1);
+    s.splice(toIdx, 0, moved);
+    updateAndSave(s.map((a, i) => ({ ...a, order: i + 1 })));
   }
 
   const sorted = [...localAuthors].sort((a, b) => a.order - b.order);
@@ -113,17 +147,17 @@ export default function AuthorsTab({
     <div className="space-y-6">
       {/* Author list */}
       <div className="space-y-2">
-        {sorted.map((a, i) => {
+        {sorted.map((a) => {
           const c = getCoauthor(a.id);
           return (
             <div
               key={a.id}
               draggable
-              onDragStart={() => setDragIdx(i)}
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDragId(a.id); }}
               onDragOver={(e) => e.preventDefault()}
-              onDrop={() => { if (dragIdx !== null) reorder(dragIdx, i); setDragIdx(null); }}
-              onDragEnd={() => setDragIdx(null)}
-              className={`border border-zinc-200 dark:border-zinc-800 rounded-xl transition-all ${dragIdx === i ? "opacity-50" : ""}`}
+              onDrop={() => { if (dragId !== null) reorder(dragId, a.id); setDragId(null); }}
+              onDragEnd={() => setDragId(null)}
+              className={`border border-zinc-200 dark:border-zinc-800 rounded-xl transition-all ${dragId === a.id ? "opacity-50" : ""}`}
             >
               <div className="flex items-center gap-3 p-4">
                 {/* Drag handle */}
@@ -138,13 +172,31 @@ export default function AuthorsTab({
                 <span className="text-xs text-zinc-400 font-mono w-5 shrink-0">{a.order}</span>
 
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium">{c?.name || a.id}</span>
-                  {c?.institution && <span className="text-xs text-zinc-500 ml-2">{c.institution}</span>}
-                  {c?.role === "corresponding" && (
-                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">
-                      corresponding
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium">{c?.name || a.id}</span>
+                    {c?.role === "corresponding" && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">
+                        corresponding
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 space-y-0.5">
+                    {c?.affiliations && c.affiliations.length > 0 ? (
+                      c.affiliations.map((af, i) => af.institution ? (
+                        <div key={i} className="flex items-center gap-3 flex-wrap">
+                          <CopyField value={[af.institution, af.city].filter(Boolean).join(", ")} className="text-xs text-zinc-500" />
+                        </div>
+                      ) : null)
+                    ) : c?.institution ? (
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <CopyField value={c.institution} className="text-xs text-zinc-500" />
+                      </div>
+                    ) : null}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {c?.email && <CopyField value={c.email} className="text-xs text-zinc-400" />}
+                      {c?.orcid && <CopyField value={`https://orcid.org/${c.orcid}`} className="text-xs text-zinc-400" />}
+                    </div>
+                  </div>
                 </div>
 
                 <button onClick={() => setExpanded(expanded === a.id ? null : a.id)} className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300">

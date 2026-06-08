@@ -71,3 +71,13 @@ Opens at http://localhost:3000.
 - The tool registry in `tools.ts` is the single source of truth for what shows up in the dashboard
 - Token files live in `~/.claude/` and are checked at runtime for status badges
 - Briefing outputs go to `~/morning-brief/{date}.md`
+
+## Action item states
+
+Action items have three terminal states stored in `~/morning-brief/.action-items-state.json`:
+
+- **Completed** (checkbox) — item is done; excluded from the next morning's carry-over
+- **Won't do** (slash-circle icon, hover to reveal) — item is intentionally skipped; also excluded from carry-over and never resurfaces in future workflow summaries
+- **Deleted** (trash icon) — permanently removed from the list
+
+When the morning briefing runs, Step 1 reads the state file and skips any item whose ID appears in `completed` or `wontdo` before building the "Carried Over from Yesterday" section.

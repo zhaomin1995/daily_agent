@@ -4,6 +4,12 @@ import { COAUTHORS_FILE } from "@/lib/submissionPaths";
 
 export const dynamic = "force-dynamic";
 
+interface Affiliation {
+  institution: string;
+  department?: string;
+  city?: string;
+}
+
 interface Coauthor {
   id: string;
   name: string;
@@ -15,6 +21,7 @@ interface Coauthor {
   institution?: string;
   department?: string;
   city?: string;
+  affiliations?: Affiliation[];
   contributions?: string[];
 }
 

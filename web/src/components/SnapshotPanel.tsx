@@ -30,22 +30,16 @@ export default function SnapshotPanel() {
           </span>
         )}
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <Stat
-          value={data.urgent}
-          label="Urgent"
-          color={data.urgent > 0 ? "text-red-600 dark:text-red-400" : "text-zinc-400"}
-        />
-        <Stat
-          value={data.actionNeeded}
-          label="Action Needed"
-          color={data.actionNeeded > 0 ? "text-amber-600 dark:text-amber-400" : "text-zinc-400"}
-        />
-        <Stat
-          value={data.priorities}
-          label="Priorities"
-          color={data.priorities > 0 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400"}
-        />
+      <div className="flex gap-6">
+        {data.urgent > 0 && (
+          <Stat value={data.urgent} label="Urgent" color="text-red-600 dark:text-red-400" />
+        )}
+        {data.actionNeeded > 0 && (
+          <Stat value={data.actionNeeded} label="Action Needed" color="text-amber-600 dark:text-amber-400" />
+        )}
+        {data.priorities > 0 && (
+          <Stat value={data.priorities} label="Priorities" color="text-blue-600 dark:text-blue-400" />
+        )}
       </div>
     </div>
   );

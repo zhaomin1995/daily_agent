@@ -5,6 +5,8 @@ export interface Tool {
   script: string;
   category: string;
   schedule: string | null;
+  type?: "script" | "link";
+  href?: string;
 }
 
 export const tools: Tool[] = [
@@ -16,6 +18,7 @@ export const tools: Tool[] = [
     script: "email-brief",
     category: "Daily Automation",
     schedule: null,
+    type: "script",
   },
   {
     id: "workflow-brief",
@@ -25,5 +28,39 @@ export const tools: Tool[] = [
     script: "workflow-brief",
     category: "Daily Automation",
     schedule: "Weekdays 8:00 AM",
+    type: "script",
+  },
+  {
+    id: "submissions",
+    name: "Submission Manager",
+    description:
+      "Manage manuscript submissions — track co-authors with affiliations & ORCID, assign CRediT contributions, paste author lists for instant selection and export as formatted Word documents.",
+    script: "",
+    category: "Research",
+    schedule: null,
+    type: "link",
+    href: "/submissions",
+  },
+  {
+    id: "availability",
+    name: "Availability",
+    description:
+      "Pull your Outlook calendar and generate ready-to-paste availability windows for meeting scheduling. Set working hours, minimum slot size, and get a formatted block you can paste directly into email.",
+    script: "",
+    category: "Daily",
+    schedule: null,
+    type: "link",
+    href: "/availability",
+  },
+  {
+    id: "references",
+    name: "Reference Generator",
+    description:
+      "Paste manuscript text, a rough reference list, or DOIs/PMIDs and generate a clean, numbered reference list in APA, Vancouver, or NLM format ready to copy or download as .docx.",
+    script: "",
+    category: "Research",
+    schedule: null,
+    type: "link",
+    href: "/references",
   },
 ];

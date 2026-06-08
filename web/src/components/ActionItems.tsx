@@ -11,6 +11,7 @@ interface ActionItem {
   text: string;
   date: string;
   completed: boolean;
+  wontdo: boolean;
   source: Source;
   priority?: Priority;
 }
@@ -35,14 +36,21 @@ export default function ActionItems() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  useEffect(() => {
+  const refresh = () => {
     fetch("/api/action-items")
       .then((r) => r.json())
       .then((data: ActionItem[]) => {
-        setItems(data.filter((i) => !i.completed));
+        setItems(data.filter((i) => !i.completed && !i.wontdo));
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    refresh();
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   async function toggle(id: string) {

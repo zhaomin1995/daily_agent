@@ -5,11 +5,19 @@ import Link from "next/link";
 
 interface Submission {
   id: string;
+  submission_kind: "manuscript" | "abstract";
+  project_label: string;
   title: string;
+  running_title: string;
   journal: string;
+  journal_abbrev: string;
+  conference: string;
+  conference_abbrev: string;
+  presentation_type: string;
   status: string;
   next_action: string;
   next_action_due: string | null;
+  deadline: string | null;
   authors: { id: string }[];
 }
 
@@ -29,6 +37,8 @@ export default function SubmissionsPage() {
   const [creating, setCreating] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"newest" | "due_date" | "status" | "title">("newest");
+  const [kindFilter, setKindFilter] = useState<"manuscript" | "abstract">("manuscript");
 
   const fetchSubmissions = useCallback(async () => {
     const res = await fetch("/api/submissions");
@@ -41,10 +51,14 @@ export default function SubmissionsPage() {
 
   async function createNew() {
     setCreating(true);
+    const isAbstract = kindFilter === "abstract";
     const res = await fetch("/api/submissions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "Untitled Manuscript" }),
+      body: JSON.stringify({
+        submission_kind: kindFilter,
+        title: isAbstract ? "Untitled Abstract" : "Untitled Manuscript",
+      }),
     });
     const { id } = await res.json();
     window.location.href = `/submissions/${id}`;
@@ -68,7 +82,25 @@ export default function SubmissionsPage() {
     setConfirmDeleteId(null);
   }
 
-  const visible = submissions.filter((s) => showArchived ? s.status === "archived" : s.status !== "archived");
+  const statusOrder: Record<string, number> = { revision: 0, submitted: 1, under_review: 2, draft: 3, accepted: 4, rejected: 5, archived: 6 };
+  const filtered = submissions.filter((s) => {
+    const kind = s.submission_kind || "manuscript";
+    if (showArchived) return s.status === "archived" && kind === kindFilter;
+    return s.status !== "archived" && kind === kindFilter;
+  });
+  const visible = [...filtered].sort((a, b) => {
+    if (sortBy === "due_date") {
+      const aDate = a.deadline || a.next_action_due;
+      const bDate = b.deadline || b.next_action_due;
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+      return aDate.localeCompare(bDate);
+    }
+    if (sortBy === "status") return (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+    if (sortBy === "title") return a.title.localeCompare(b.title);
+    return 0; // newest = insertion order from API
+  });
   const archivedCount = submissions.filter((s) => s.status === "archived").length;
 
   return (
@@ -87,20 +119,37 @@ export default function SubmissionsPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6 sm:mb-8">
+      <div className="flex items-start justify-between gap-4 mb-6 sm:mb-8">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Submissions</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Manage manuscript submissions and checklists. · {" "}
-            <a href="/submissions/coauthors" className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 underline underline-offset-2">Co-authors</a>
-          </p>
+          <p className="text-sm text-zinc-500 mt-1">Manuscripts and conference abstracts.</p>
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            <div className="flex gap-1 border border-zinc-200 dark:border-zinc-800 rounded-lg p-1">
+              {(["manuscript", "abstract"] as const).map((k) => (
+                <button key={k} onClick={() => { setKindFilter(k); setShowArchived(false); }}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize ${kindFilter === k ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
+                  {k === "manuscript" ? "Manuscripts" : "Abstracts"}
+                </button>
+              ))}
+            </div>
+            <a
+              href="/submissions/coauthors"
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+              Co-authors
+            </a>
+          </div>
         </div>
         <button
           onClick={createNew}
           disabled={creating}
-          className="px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 shrink-0"
         >
-          {creating ? "Creating…" : "+ New Manuscript"}
+          {creating ? "Creating…" : kindFilter === "abstract" ? "+ New Abstract" : "+ New Manuscript"}
         </button>
       </div>
 
@@ -111,6 +160,21 @@ export default function SubmissionsPage() {
         >
           {showArchived ? "← Back to active" : `Show ${archivedCount} archived`}
         </button>
+      )}
+
+      {!loading && visible.length > 1 && (
+        <div className="flex items-center gap-1.5 mb-4">
+          <span className="text-xs text-zinc-400 mr-1">Sort:</span>
+          {(["newest", "due_date", "status", "title"] as const).map((opt) => (
+            <button
+              key={opt}
+              onClick={() => setSortBy(opt)}
+              className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${sortBy === opt ? "bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100" : "border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800"}`}
+            >
+              {opt === "due_date" ? "Due date" : opt.charAt(0).toUpperCase() + opt.slice(1)}
+            </button>
+          ))}
+        </div>
       )}
 
       {loading ? (
@@ -140,9 +204,32 @@ export default function SubmissionsPage() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-sm truncate">{s.title}</h3>
-                  {s.journal && (
-                    <p className="text-xs text-zinc-500 mt-1">{s.journal}</p>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    {s.project_label && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400 font-medium shrink-0">
+                        {s.project_label}
+                      </span>
+                    )}
+                    <h3 className="font-semibold text-sm truncate">{s.title}</h3>
+                  </div>
+                  {s.running_title && (
+                    <p className="text-xs text-zinc-400 italic truncate mt-0.5">{s.running_title}</p>
+                  )}
+                  {s.submission_kind === "abstract" ? (
+                    (s.conference || s.conference_abbrev) && (
+                      <p className="text-xs text-zinc-500 mt-1">
+                        {s.conference}
+                        {s.conference_abbrev && <span className="text-zinc-400 ml-1">({s.conference_abbrev})</span>}
+                        {s.presentation_type && <span className="text-zinc-400 ml-1">· {s.presentation_type}</span>}
+                      </p>
+                    )
+                  ) : (
+                    (s.journal || s.journal_abbrev) && (
+                      <p className="text-xs text-zinc-500 mt-1">
+                        {s.journal}
+                        {s.journal_abbrev && <span className="text-zinc-400 ml-1">({s.journal_abbrev})</span>}
+                      </p>
+                    )
                   )}
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[s.status] || statusColors.draft}`}>
@@ -152,11 +239,19 @@ export default function SubmissionsPage() {
                       {s.authors?.length || 0} author{(s.authors?.length || 0) !== 1 ? "s" : ""}
                     </span>
                   </div>
-                  {s.next_action && s.status !== "archived" && (
-                    <p className="text-xs text-zinc-500 mt-2">
-                      Next: {s.next_action}
-                      {s.next_action_due && <span className="text-zinc-400 ml-1">· due {s.next_action_due}</span>}
-                    </p>
+                  {s.submission_kind === "abstract" ? (
+                    s.deadline && s.status !== "archived" && (
+                      <p className="text-xs text-zinc-500 mt-2">
+                        Deadline: <span className="text-zinc-400">{s.deadline}</span>
+                      </p>
+                    )
+                  ) : (
+                    s.next_action && s.status !== "archived" && (
+                      <p className="text-xs text-zinc-500 mt-2">
+                        Next: {s.next_action}
+                        {s.next_action_due && <span className="text-zinc-400 ml-1">· due {s.next_action_due}</span>}
+                      </p>
+                    )
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
