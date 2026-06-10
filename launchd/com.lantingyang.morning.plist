@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lantingyang.morning</string>
+
+    <!-- Runs the logging wrapper, which sets PATH and calls ~/.local/bin/morning -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>/Users/lantingyang/github/daily_agent/run-morning</string>
+    </array>
+
+    <!-- 8:00 AM Monday (1) through Friday (5) -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+
+    <!-- Do not fire on load; only on the schedule above -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- Belt-and-suspenders PATH in case the wrapper is bypassed -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/lantingyang/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <!-- launchd-level capture for catastrophic failures before the wrapper logs -->
+    <key>StandardOutPath</key>
+    <string>/Users/lantingyang/morning-brief/logs/launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/lantingyang/morning-brief/logs/launchd.err</string>
+</dict>
+</plist>

@@ -1,0 +1,20 @@
+#!/bin/zsh
+# launchd entry point for the morning routine.
+#
+# launchd starts jobs with a minimal environment, so we set an explicit PATH
+# that includes claude (~/.local/bin), node (/usr/local/bin) and the system
+# binaries the scripts call (osascript, sed, date). We also add per-run logging
+# — one dated file per day under ~/morning-brief/logs — so a scheduled run
+# always leaves a trace, instead of failing silently the way the old setup did.
+
+export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+LOGDIR="$HOME/morning-brief/logs"
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/$(date +%Y-%m-%d).log"
+
+echo "===== morning run started $(date '+%Y-%m-%d %H:%M:%S') =====" >> "$LOG"
+"$HOME/.local/bin/morning" >> "$LOG" 2>&1
+status=$?
+echo "===== morning run finished $(date '+%Y-%m-%d %H:%M:%S') (exit $status) =====" >> "$LOG"
+exit $status
