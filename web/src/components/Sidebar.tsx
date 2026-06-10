@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import DarkModeToggle from "./DarkModeToggle";
 import StatusIndicator from "./StatusIndicator";
+import { usePreferences, ACCENTS } from "./PreferencesProvider";
 
 interface NavItem {
   href: string;
@@ -124,6 +125,7 @@ function getPageTitle(pathname: string): string {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { accent, setAccent } = usePreferences();
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -147,7 +149,7 @@ export default function Sidebar() {
           collapsed ? "justify-center px-2" : "px-2.5"
         } ${
           active
-            ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+            ? "bg-gradient-brand text-white shadow-brand"
             : "text-zinc-600 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
         }`}
       >
@@ -205,6 +207,28 @@ export default function Sidebar() {
           ))}
         </nav>
 
+        {/* Theme swatches — quick accent switch (full picker lives in Config) */}
+        {!collapsed && (
+          <div className="px-3 pt-3 border-t border-zinc-200 dark:border-zinc-800">
+            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1.5 px-2.5">Theme</p>
+            <div className="flex flex-wrap gap-1.5 px-2.5">
+              {ACCENTS.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => setAccent(a.id)}
+                  title={a.label}
+                  aria-label={`Accent ${a.label}`}
+                  aria-pressed={accent === a.id}
+                  className={`w-4 h-4 rounded-full transition-transform hover:scale-125 ${
+                    accent === a.id ? "ring-2 ring-offset-1 ring-accent ring-offset-zinc-50 dark:ring-offset-zinc-950 scale-110" : ""
+                  }`}
+                  style={{ backgroundImage: `linear-gradient(135deg, rgb(${a.from}), rgb(${a.to}))` }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Quick links */}
         {!collapsed && (
           <div className="px-3 pb-2 border-t border-zinc-200 dark:border-zinc-800 pt-3">
@@ -247,7 +271,7 @@ export default function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors ${
-                  active ? "text-zinc-900 dark:text-white" : "text-zinc-400 dark:text-zinc-500"
+                  active ? "text-accent" : "text-zinc-400 dark:text-zinc-500"
                 }`}
               >
                 {icons[item.icon]}

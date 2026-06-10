@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePreferences, ACCENTS } from "./PreferencesProvider";
 
 interface AccountStatus {
   name: string;
@@ -12,6 +13,87 @@ interface Config {
   accounts: AccountStatus[];
   briefingDirExists: boolean;
   briefingCount: number;
+}
+
+// Theme picker — independent of the config fetch, so it renders immediately
+// (even while account config is still loading or unavailable).
+function AppearanceCard() {
+  const { accent, fontSize, highContrast, setAccent, setFontSize, setHighContrast } = usePreferences();
+  return (
+    <section>
+      <h2 className="text-base font-semibold mb-4">Appearance</h2>
+      <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 sm:p-5 bg-white dark:bg-zinc-900 space-y-5">
+        {/* Accent swatches */}
+        <div>
+          <p className="text-sm font-medium mb-2">Accent</p>
+          <div className="flex flex-wrap gap-2.5">
+            {ACCENTS.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => setAccent(a.id)}
+                title={a.label}
+                aria-label={a.label}
+                aria-pressed={accent === a.id}
+                className={`w-8 h-8 rounded-full transition-transform hover:scale-110 ${
+                  accent === a.id
+                    ? "ring-2 ring-offset-2 ring-accent ring-offset-white dark:ring-offset-zinc-900 scale-110"
+                    : ""
+                }`}
+                style={{ backgroundImage: `linear-gradient(135deg, rgb(${a.from}), rgb(${a.to}))` }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Text size */}
+        <div>
+          <p className="text-sm font-medium mb-2">Text size</p>
+          <div className="inline-flex rounded-lg border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+            {([
+              { id: "sm", label: "Small" },
+              { id: "base", label: "Default" },
+              { id: "lg", label: "Large" },
+            ] as const).map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setFontSize(s.id)}
+                className={`px-3 py-1.5 text-sm transition-colors ${
+                  fontSize === s.id
+                    ? "bg-accent text-white"
+                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* High contrast toggle */}
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">High contrast</p>
+            <p className="text-xs text-zinc-500">Flatten colors and gradients for maximum legibility.</p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={highContrast}
+            aria-label="High contrast"
+            onClick={() => setHighContrast(!highContrast)}
+            className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${
+              highContrast ? "bg-accent" : "bg-zinc-300 dark:bg-zinc-700"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                highContrast ? "translate-x-5" : ""
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export default function ConfigPanel() {
@@ -54,11 +136,18 @@ export default function ConfigPanel() {
   }
 
   if (!config) {
-    return <p className="text-sm text-zinc-500">Loading configuration...</p>;
+    return (
+      <div className="space-y-6 sm:space-y-8">
+        <AppearanceCard />
+        <p className="text-sm text-zinc-500">Loading configuration...</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6 sm:space-y-8">
+      <AppearanceCard />
+
       {/* Email account tokens */}
       <section>
         <h2 className="text-base font-semibold mb-4">Email Accounts</h2>

@@ -2,7 +2,21 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-type AccentColor = "zinc" | "blue" | "purple" | "green" | "orange";
+// Accent presets — each carries a gradient pair (start + end rgb triples) so the
+// same choice drives both solid accents (.bg-accent) and the brand gradient
+// (.bg-gradient-brand / .text-gradient-brand). "aurora" is the default.
+export const ACCENTS = [
+  { id: "aurora", label: "Aurora", from: "99 102 241", to: "236 72 153" },
+  { id: "grape", label: "Grape", from: "168 85 247", to: "236 72 153" },
+  { id: "ocean", label: "Ocean", from: "59 130 246", to: "34 211 238" },
+  { id: "forest", label: "Forest", from: "16 185 129", to: "20 184 166" },
+  { id: "sunset", label: "Sunset", from: "249 115 22", to: "236 72 153" },
+  { id: "coral", label: "Coral", from: "244 63 94", to: "249 115 22" },
+  { id: "ice", label: "Ice", from: "34 211 238", to: "99 102 241" },
+  { id: "zinc", label: "Mono", from: "24 24 27", to: "82 82 91" },
+] as const;
+
+export type AccentColor = (typeof ACCENTS)[number]["id"];
 type FontSize = "sm" | "base" | "lg";
 
 interface Preferences {
@@ -17,7 +31,7 @@ interface PreferencesContextValue extends Preferences {
   setHighContrast: (v: boolean) => void;
 }
 
-const defaults: Preferences = { accent: "zinc", fontSize: "base", highContrast: false };
+const defaults: Preferences = { accent: "aurora", fontSize: "base", highContrast: false };
 
 const PreferencesContext = createContext<PreferencesContextValue>({
   ...defaults,
@@ -30,13 +44,23 @@ export function usePreferences() {
   return useContext(PreferencesContext);
 }
 
-const accentVars: Record<AccentColor, string> = {
-  zinc: "24 24 27",
-  blue: "59 130 246",
-  purple: "139 92 246",
-  green: "34 197 94",
-  orange: "249 115 22",
+// Lookup by id, plus migration for the old 5-name scheme stored in localStorage.
+const accentById = Object.fromEntries(ACCENTS.map((a) => [a.id, a])) as Record<string, (typeof ACCENTS)[number]>;
+const legacyAccent: Record<string, AccentColor> = {
+  blue: "ocean",
+  purple: "grape",
+  green: "forest",
+  orange: "sunset",
+  zinc: "zinc",
 };
+
+function normalizeAccent(value: unknown): AccentColor {
+  if (typeof value === "string") {
+    if (value in accentById) return value as AccentColor;
+    if (value in legacyAccent) return legacyAccent[value];
+  }
+  return defaults.accent;
+}
 
 const fontSizeClasses: Record<FontSize, string> = {
   sm: "text-sm",
@@ -50,13 +74,19 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     const stored = localStorage.getItem("preferences");
     if (stored) {
-      try { setPrefs({ ...defaults, ...JSON.parse(stored) }); } catch {}
+      try {
+        const parsed = JSON.parse(stored);
+        setPrefs({ ...defaults, ...parsed, accent: normalizeAccent(parsed.accent) });
+      } catch {}
     }
   }, []);
 
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty("--accent-rgb", accentVars[prefs.accent]);
+    const accent = accentById[prefs.accent] ?? accentById[defaults.accent];
+    // Both stops drive the gradient utilities; --accent-rgb is the primary solid.
+    root.style.setProperty("--accent-rgb", accent.from);
+    root.style.setProperty("--accent-rgb-2", accent.to);
     root.classList.toggle("high-contrast", prefs.highContrast);
     root.classList.remove("text-sm", "text-base", "text-lg");
     root.classList.add(fontSizeClasses[prefs.fontSize]);
