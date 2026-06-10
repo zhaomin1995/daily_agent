@@ -44,6 +44,14 @@ const PRIORITY_DOT: Record<Priority, string> = {
   low: "bg-zinc-400",
 };
 
+// Left accent rail color per source, so rows are scannable by origin.
+const SOURCE_BAR: Record<Source, string> = {
+  "email-urgent": "border-red-400 dark:border-red-500",
+  "email-action": "border-amber-400 dark:border-amber-500",
+  workflow: "border-indigo-400 dark:border-indigo-500",
+  manual: "border-zinc-300 dark:border-zinc-600",
+};
+
 // Ranking: Urgent first, then email actions, then workflow, then manual; within a
 // source, explicit high/medium/low priority wins, then most recent date first.
 const SOURCE_RANK: Record<Source, number> = { "email-urgent": 0, "email-action": 1, workflow: 2, manual: 3 };
@@ -157,7 +165,7 @@ export default function ActionItemsPage() {
     <div className="p-4 sm:p-8 max-w-3xl">
       <div className="flex items-end justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Today</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight"><span className="text-gradient-brand">Today</span></h1>
           <p className="text-sm text-zinc-500 mt-1">{prettyDate}</p>
         </div>
         {summary?.nearestDeadline && (
@@ -169,10 +177,10 @@ export default function ActionItemsPage() {
 
       {/* Snapshot counts (mirrors the dashboard SnapshotPanel) */}
       {summary && (summary.urgent > 0 || summary.actionNeeded > 0 || summary.priorities > 0) && (
-        <div className="flex gap-6 mt-5 mb-2">
-          {summary.urgent > 0 && <Stat value={summary.urgent} label="Urgent" color="text-red-600 dark:text-red-400" />}
-          {summary.actionNeeded > 0 && <Stat value={summary.actionNeeded} label="Action Needed" color="text-amber-600 dark:text-amber-400" />}
-          {summary.priorities > 0 && <Stat value={summary.priorities} label="Priorities" color="text-blue-600 dark:text-blue-400" />}
+        <div className="flex flex-wrap gap-2.5 mt-5 mb-2">
+          {summary.urgent > 0 && <Stat value={summary.urgent} label="Urgent" className="bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" />}
+          {summary.actionNeeded > 0 && <Stat value={summary.actionNeeded} label="Action Needed" className="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" />}
+          {summary.priorities > 0 && <Stat value={summary.priorities} label="Priorities" className="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300" />}
         </div>
       )}
 
@@ -188,7 +196,7 @@ export default function ActionItemsPage() {
         />
         <button
           onClick={addItem}
-          className="px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90 transition-opacity"
+          className="px-4 py-2 text-sm font-medium rounded-lg bg-gradient-brand text-white shadow-brand hover:opacity-90 transition-opacity"
         >
           Add
         </button>
@@ -231,11 +239,11 @@ export default function ActionItemsPage() {
   );
 }
 
-function Stat({ value, label, color }: { value: number; label: string; color: string }) {
+function Stat({ value, label, className }: { value: number; label: string; className: string }) {
   return (
-    <div className="text-center">
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
-      <p className="text-[11px] text-zinc-500 mt-0.5">{label}</p>
+    <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 ${className}`}>
+      <span className="text-xl font-bold leading-none">{value}</span>
+      <span className="text-[11px] font-medium leading-tight">{label}</span>
     </div>
   );
 }
@@ -265,7 +273,7 @@ function ItemList({
         {items.map((item) => {
           const badge = SOURCE_BADGE[item.source];
           return (
-            <li key={item.id} className="group flex items-start gap-2.5 rounded-lg px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900/50">
+            <li key={item.id} className={`group flex items-start gap-2.5 rounded-lg border-l-2 pl-3 pr-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${SOURCE_BAR[item.source]}`}>
               {/* Complete */}
               <button
                 onClick={() => onComplete(item.id)}

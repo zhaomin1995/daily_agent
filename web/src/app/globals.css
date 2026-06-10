@@ -85,8 +85,8 @@ body {
 
 @media (hover: hover) {
   .tool-card:hover {
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-    transform: translateY(-1px);
+    box-shadow: 0 6px 28px rgb(var(--accent-rgb) / 0.12);
+    transform: translateY(-2px);
   }
 }
 
@@ -150,6 +150,30 @@ body {
   box-shadow: 0 10px 34px rgb(var(--accent-rgb-2) / 0.30);
 }
 
+/* Soft brand "mesh" wash for hero/header bands */
+.hero-mesh {
+  background-image:
+    radial-gradient(55% 80% at 0% 0%, rgb(var(--accent-rgb) / 0.12), transparent 60%),
+    radial-gradient(50% 70% at 100% 0%, rgb(var(--accent-rgb-2) / 0.12), transparent 60%);
+}
+
+/* Sliding gradient bar to mark a running tool */
+@keyframes progress-slide {
+  0% { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-progress {
+  background-image: linear-gradient(
+    90deg,
+    rgb(var(--accent-rgb)),
+    rgb(var(--accent-rgb-2)),
+    rgb(var(--accent-rgb))
+  );
+  background-size: 200% 100%;
+  animation: progress-slide 1.2s linear infinite;
+}
+
 /* High contrast flattens gradients/glow to a single readable color */
 .high-contrast .text-gradient-brand {
   background-image: none;
@@ -163,6 +187,15 @@ body {
 
 .high-contrast .shadow-brand {
   box-shadow: none;
+}
+
+.high-contrast .hero-mesh {
+  background-image: none;
+}
+
+.high-contrast .animate-progress {
+  background-image: none;
+  background-color: var(--foreground);
 }
 
 /* High contrast mode */

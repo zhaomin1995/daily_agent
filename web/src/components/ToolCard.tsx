@@ -44,6 +44,17 @@ function formatElapsed(seconds: number): string {
 
 const DESC_CLAMP = 120;
 
+// Per-category pill colors so cards read by category at a glance.
+// "Daily Automation" matches automation first (indigo); plain "Daily" -> sky.
+function categoryStyle(category: string): string {
+  const c = category.toLowerCase();
+  if (c.includes("research")) return "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300";
+  if (c.includes("automation")) return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300";
+  if (c.includes("daily")) return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300";
+  if (c.includes("setting")) return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+  return "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400";
+}
+
 export default function ToolCard({ id, name, description, script, category, status, lastRun, schedule, badge, index, type = "script", href }: ToolCardProps) {
   const [running, setRunning] = useState(false);
   const [stdout, setStdout] = useState("");
@@ -205,11 +216,13 @@ export default function ToolCard({ id, name, description, script, category, stat
 
   return (
     <>
-      <div className={`tool-card border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 sm:p-5 bg-white dark:bg-zinc-900 transition-all duration-300 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}`}>
+      <div className={`tool-card relative overflow-hidden border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 sm:p-5 bg-white dark:bg-zinc-900 transition-all duration-300 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"} ${running ? "shadow-brand" : ""}`}>
+        {/* Sliding gradient bar while the tool runs */}
+        {running && <span className="absolute inset-x-0 top-0 h-1 animate-progress" />}
         {/* Top row: badges + quick actions */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">{category}</span>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${categoryStyle(category)}`}>{category}</span>
             {status === "ready" ? (
               <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Ready</span>
             ) : (

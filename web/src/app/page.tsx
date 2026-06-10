@@ -94,12 +94,17 @@ export default function Dashboard() {
   return (
     <PullToRefresh onRefresh={fetchTools}>
       <div className="p-4 sm:p-8 max-w-4xl">
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-zinc-500 mt-1 mb-6 sm:mb-8">All automation tools in one place.</p>
+        {/* Hero band: gradient title + soft mesh wash + colored stats */}
+        <div className="hero-mesh rounded-2xl border border-zinc-100 dark:border-zinc-800/60 px-4 sm:px-6 py-5 sm:py-6 mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            <span className="text-gradient-brand">Dashboard</span>
+          </h1>
+          <p className="text-sm text-zinc-500 mt-1 mb-5">All automation tools in one place.</p>
 
-        {!loading && (
-          <StatsBar toolCount={tools.length} readyCount={readyCount} runningCount={0} briefingCount={briefingCount} lastRun={lastRun} />
-        )}
+          {!loading && (
+            <StatsBar toolCount={tools.length} readyCount={readyCount} runningCount={0} briefingCount={briefingCount} lastRun={lastRun} />
+          )}
+        </div>
 
         <SnapshotPanel />
         <ActionItems />
