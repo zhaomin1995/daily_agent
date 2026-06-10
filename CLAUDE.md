@@ -70,24 +70,36 @@ daily_agent/
 └── web/                        # Next.js 16 dashboard (React 19, Tailwind CSS, TypeScript)
     └── src/
         ├── app/
-        │   ├── page.tsx                    # Dashboard — tool cards with run buttons
-        │   ├── logs/page.tsx               # Log viewer — browse past briefings
-        │   ├── config/page.tsx             # Config — manage tokens and account status
-        │   └── api/
-        │       ├── tools/route.ts          # GET: list tools with status
-        │       ├── tools/[id]/run/route.ts # POST: execute a tool script
-        │       ├── logs/route.ts           # GET: list briefing files
-        │       ├── logs/[date]/route.ts    # GET: read a specific briefing
-        │       └── config/route.ts         # GET/PUT: token status and save
-        ├── components/
-        │   ├── Sidebar.tsx                 # Nav sidebar
-        │   ├── ToolCard.tsx                # Tool card with inline output
-        │   ├── LogViewer.tsx               # Date list + content display
-        │   └── ConfigPanel.tsx             # Account status + token input
+        │   ├── page.tsx            # Dashboard — tool cards with run buttons
+        │   ├── logs/               # Log viewer — browse split briefings + action items
+        │   ├── config/             # Config — tokens and account status
+        │   ├── availability/       # Calendar availability generator
+        │   ├── email-draft/        # Email Draft Assistant
+        │   ├── email/[id]/         # Single-email view
+        │   ├── references/         # Reference Generator
+        │   ├── submissions/        # Submission Manager (+ [id], coauthors)
+        │   ├── login/              # Auth (NextAuth)
+        │   └── api/                # ~29 route handlers, including:
+        │       ├── tools/route.ts            # GET: list tools with status
+        │       ├── tools/[id]/{run,status,history,prompt}/route.ts
+        │       ├── logs/route.ts             # GET: list split briefing files (badges)
+        │       ├── logs/[date]/route.ts      # GET/PUT: read/edit one file ({date}-{type})
+        │       ├── action-items/route.ts     # GET/PUT/PATCH/DELETE: action-item state
+        │       ├── briefing/actions/route.ts, summary/route.ts, calendar/route.ts
+        │       ├── search/route.ts, open-file/route.ts, email/[id]/route.ts
+        │       ├── email-draft/route.ts, coauthors/*, submissions/*
+        │       └── config/route.ts, auth/[...nextauth]/route.ts
+        ├── components/             # ~22 components (LogViewer, ActionItems, ToolCard,
+        │                           #   Sidebar, ConfigPanel, SnapshotPanel, StatsBar, …)
         └── lib/
-            ├── tools.ts                    # Tool registry (add new tools here)
-            └── paths.ts                    # Shared path constants
+            ├── tools.ts            # Tool registry (add new tools here)
+            └── paths.ts            # Shared path constants
 ```
+
+> The dashboard is more built-out than this tree implies (logs viewer with
+> interactive action-item state, calendar availability, search, submissions,
+> references, email draft). Run `find web/src/app/api -name route.ts` for the
+> full route list before assuming a capability is missing.
 
 ## Deployment
 
