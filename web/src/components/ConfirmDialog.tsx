@@ -28,7 +28,7 @@ export default function ConfirmDialog({
         onClick={onCancel}
       />
       {/* Dialog card */}
-      <div className="relative bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-sm p-5 sm:p-6 animate-scale-in">
+      <div className="relative glass border border-white/50 dark:border-white/10 rounded-2xl shadow-2xl w-full max-w-sm p-5 sm:p-6 animate-scale-in">
         <h3 className="text-base font-semibold">{title}</h3>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed">
           {message}
@@ -42,7 +42,7 @@ export default function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
-            className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300 transition-colors"
+            className="btn-brand flex-1 px-4 py-2.5 text-sm font-medium rounded-lg"
           >
             {confirmLabel}
           </button>

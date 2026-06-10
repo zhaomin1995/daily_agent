@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { localDate } from "@/lib/date";
+import Pill, { type PillTone } from "@/components/Pill";
 
 type Priority = "high" | "medium" | "low";
 type Source = "workflow" | "email-urgent" | "email-action" | "manual";
@@ -30,12 +31,12 @@ interface Summary {
   nearestDeadline: string | null;
 }
 
-// Source badge styling — workflow/manual show no badge (they're the default rows).
-const SOURCE_BADGE: Record<Source, { label: string; className: string } | null> = {
-  "email-urgent": { label: "Urgent", className: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" },
-  "email-action": { label: "Email", className: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
-  workflow: { label: "Workflow", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
-  manual: { label: "Manual", className: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400" },
+// Source badge: label + Pill tone, matching the per-source left rail color.
+const SOURCE_PILL: Record<Source, { label: string; tone: PillTone }> = {
+  "email-urgent": { label: "Urgent", tone: "red" },
+  "email-action": { label: "Email", tone: "amber" },
+  workflow: { label: "Workflow", tone: "indigo" },
+  manual: { label: "Manual", tone: "zinc" },
 };
 
 const PRIORITY_DOT: Record<Priority, string> = {
@@ -165,7 +166,7 @@ export default function ActionItemsPage() {
     <div className="p-4 sm:p-8 max-w-3xl">
       <div className="flex items-end justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight"><span className="text-gradient-brand">Today</span></h1>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight"><span className="text-gradient-brand">Today</span></h1>
           <p className="text-sm text-zinc-500 mt-1">{prettyDate}</p>
         </div>
         {summary?.nearestDeadline && (
@@ -271,13 +272,13 @@ function ItemList({
       <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${muted ? "text-zinc-400" : "text-zinc-500"}`}>{title}</h3>
       <ul className="space-y-1">
         {items.map((item) => {
-          const badge = SOURCE_BADGE[item.source];
+          const badge = SOURCE_PILL[item.source];
           return (
             <li key={item.id} className={`group flex items-start gap-2.5 rounded-lg border-l-2 pl-3 pr-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${SOURCE_BAR[item.source]}`}>
               {/* Complete */}
               <button
                 onClick={() => onComplete(item.id)}
-                className="mt-0.5 shrink-0 w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 hover:border-emerald-400 transition-colors"
+                className="mt-0.5 shrink-0 w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 hover:border-emerald-400 transition-all hover:scale-110 active:scale-90"
                 title="Mark done"
               />
               {/* Priority flag (click to cycle) */}
@@ -289,9 +290,7 @@ function ItemList({
                 <span className={`block w-2 h-2 rounded-full ${item.priority ? PRIORITY_DOT[item.priority] : "bg-zinc-200 dark:bg-zinc-700"}`} />
               </button>
               <span className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed flex-1 min-w-0">
-                {badge && (
-                  <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded mr-1.5 align-middle ${badge.className}`}>{badge.label}</span>
-                )}
+                <Pill tone={badge.tone} className="mr-1.5 align-middle">{badge.label}</Pill>
                 {item.text}
               </span>
               {/* Won't-do + delete (reveal on hover) */}

@@ -275,6 +275,53 @@ main {
   border-color: var(--color-zinc-700, #3f3f46);
 }
 
+/* Display font for headings (Space Grotesk), body stays Geist */
+.font-display {
+  font-family: var(--font-space-grotesk), var(--font-geist-sans), Arial, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Glassmorphism for modals and floating surfaces */
+.glass {
+  background-color: rgb(255 255 255 / 0.72);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+
+:is(.dark) .glass {
+  background-color: rgb(10 10 18 / 0.72);
+}
+
+.high-contrast .glass {
+  background-color: var(--background);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Gradient primary button */
+.btn-brand {
+  background-image: var(--gradient-brand);
+  color: #fff;
+  box-shadow: 0 6px 20px rgb(var(--accent-rgb) / 0.25);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-brand:hover {
+  opacity: 0.95;
+  box-shadow: 0 8px 26px rgb(var(--accent-rgb) / 0.35);
+}
+
+.btn-brand:active {
+  transform: scale(0.97);
+}
+
+.high-contrast .btn-brand {
+  background-image: none;
+  background-color: var(--foreground);
+  color: var(--background);
+  box-shadow: none;
+}
+
 /* Reduced motion: disable all animations for accessibility */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

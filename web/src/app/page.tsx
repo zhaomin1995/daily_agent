@@ -96,7 +96,7 @@ export default function Dashboard() {
       <div className="p-4 sm:p-8 max-w-4xl">
         {/* Hero band: gradient title + soft mesh wash + colored stats */}
         <div className="hero-mesh rounded-2xl border border-zinc-100 dark:border-zinc-800/60 px-4 sm:px-6 py-5 sm:py-6 mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+          <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">
             <span className="text-gradient-brand">Dashboard</span>
           </h1>
           <p className="text-sm text-zinc-500 mt-1 mb-5">All automation tools in one place.</p>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import OutputModal from "./OutputModal";
+import Pill, { type PillTone } from "./Pill";
 import QuickActions from "./QuickActions";
 import RunSparkline from "./RunSparkline";
 import SuccessAnimation from "./SuccessAnimation";
@@ -44,15 +45,15 @@ function formatElapsed(seconds: number): string {
 
 const DESC_CLAMP = 120;
 
-// Per-category pill colors so cards read by category at a glance.
+// Per-category pill tone so cards read by category at a glance.
 // "Daily Automation" matches automation first (indigo); plain "Daily" -> sky.
-function categoryStyle(category: string): string {
+function categoryTone(category: string): PillTone {
   const c = category.toLowerCase();
-  if (c.includes("research")) return "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300";
-  if (c.includes("automation")) return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300";
-  if (c.includes("daily")) return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300";
-  if (c.includes("setting")) return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
-  return "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400";
+  if (c.includes("research")) return "violet";
+  if (c.includes("automation")) return "indigo";
+  if (c.includes("daily")) return "sky";
+  if (c.includes("setting")) return "slate";
+  return "zinc";
 }
 
 export default function ToolCard({ id, name, description, script, category, status, lastRun, schedule, badge, index, type = "script", href }: ToolCardProps) {
@@ -222,12 +223,12 @@ export default function ToolCard({ id, name, description, script, category, stat
         {/* Top row: badges + quick actions */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${categoryStyle(category)}`}>{category}</span>
+            <Pill tone={categoryTone(category)}>{category}</Pill>
             {status === "ready" ? (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Ready</span>
+              <Pill tone="emerald">Ready</Pill>
             ) : (
-              <Link href="/config" className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:ring-2 hover:ring-amber-300 transition-shadow cursor-pointer">
-                Needs Setup
+              <Link href="/config" className="hover:opacity-80 transition-opacity cursor-pointer">
+                <Pill tone="amber">Needs Setup</Pill>
               </Link>
             )}
             {badge !== null && badge !== undefined && badge > 0 && (
@@ -263,7 +264,7 @@ export default function ToolCard({ id, name, description, script, category, stat
           </div>
           <div className="flex items-center gap-2">
             {type === "link" ? (
-              <Link href={href || "/"} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90 transition-opacity flex items-center gap-1.5">
+              <Link href={href || "/"} className="btn-brand w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-1.5">
                 Open
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
               </Link>
@@ -280,7 +281,7 @@ export default function ToolCard({ id, name, description, script, category, stat
                     Stop
                   </button>
                 ) : (
-                  <button onClick={handleRun} className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:opacity-90 transition-opacity active:scale-95">
+                  <button onClick={handleRun} className="btn-brand w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium rounded-lg">
                     Run
                   </button>
                 )}

@@ -27,6 +27,8 @@ export default function OutputModal({ open, title, stdout, stderr, exitCode, onC
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-white dark:bg-zinc-950">
+      {/* Brand accent line */}
+      <div className="h-1 bg-gradient-brand shrink-0" />
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
         <div className="flex items-center gap-3">
