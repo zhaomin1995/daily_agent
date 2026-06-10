@@ -64,6 +64,7 @@ daily_agent/
 ├── workflow-brief              # Workflow digest script: same pattern
 ├── email-brief-prompt.md       # Email triage prompt template ({{date}}, {{yesterday}} placeholders)
 ├── workflow-brief-prompt.md    # Workflow digest prompt template
+├── taskstore                   # Shared task-store CLI both briefings + dashboard use (see below)
 ├── coauthors.yaml              # Co-author registry for the Submission Manager
 ├── morning-setup-prompt.txt    # Original spec/requirements document (historical)
 ├── submissions/                # Submission Manager data
@@ -121,6 +122,7 @@ and vice versa (no copy/deploy step that can drift):
 | `workflow-brief` | `~/.local/bin/workflow-brief` |
 | `email-brief-prompt.md` | `~/.claude/email-brief-prompt.md` |
 | `workflow-brief-prompt.md` | `~/.claude/workflow-brief-prompt.md` |
+| `taskstore` | `~/.local/bin/taskstore` |
 
 Scheduling: `~/Library/LaunchAgents/com.lantingyang.morning.plist` runs `morning` at
 8:00 AM Mon–Fri. Run logs go to `~/morning-brief/logs/`. Manage with:
@@ -161,6 +163,29 @@ Opens at http://localhost:3000.
 - Email access is **Apple Mail via AppleScript** — no API token. Drafts are created but never sent; the user reviews and sends manually.
 - The tool registry in `tools.ts` is the single source of truth for what shows up in the dashboard.
 - Briefing outputs go to `~/morning-brief/` as split `{date}-email.md` + `{date}-workflow.md` (plus `{date}-action-prompts.md`).
+
+## How the tools update each other (shared task store)
+
+The two briefings are otherwise independent `claude -p` runs, but they share one
+substrate so a task found by one shows up in the other: the `tasks` array in
+`~/morning-brief/.action-items-state.json`, written and read through the
+**`taskstore`** CLI (repo root, symlinked to `~/.local/bin`). The CLI does atomic
+writes and `add` is idempotent (de-duped by source + text), so re-running a brief
+never creates duplicates.
+
+Flow:
+
+1. **email-brief** (Step 4b) pushes one task per Urgent / Action Needed email:
+   `taskstore add --source email --text "<action>" --ref "<sender | subject>" [--priority high]`
+2. **workflow-brief** (Step 1) runs `taskstore list --open --json` and folds those
+   tasks into Today's Priorities — this is how email follow-ups reach the workflow
+   list. (`morning` runs email-brief first, so the tasks exist by then.)
+3. The **dashboard** `/api/action-items` reads the same `tasks` array and renders
+   them in the Today view (email tasks get the "Email" badge). Complete / won't-do /
+   priority / delete all work on these via the existing id-keyed state sets.
+
+CLI: `taskstore add|list|done|rm` — see `taskstore -h`. It only touches the `tasks`
+array and preserves all other keys the dashboard owns.
 
 ## Action item states
 

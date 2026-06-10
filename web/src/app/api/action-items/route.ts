@@ -24,6 +24,18 @@ interface ManualItem {
   date: string;
 }
 
+// Tasks written by the briefings (and dashboard) through the `taskstore` CLI.
+// These are the shared substrate that lets the tools update each other: the email
+// brief pushes source="email" tasks here, the workflow brief reads them, and the
+// dashboard renders them in the Today view.
+interface StoredTask {
+  id: string;
+  text: string;
+  date: string;
+  source: string; // e.g. "email", "workflow", "manual"
+  ref?: string;
+}
+
 interface State {
   completed: string[];
   deleted: string[];
@@ -31,6 +43,7 @@ interface State {
   overrides: Record<string, string>;
   priorities: Record<string, Priority>;
   manual: ManualItem[];
+  tasks: StoredTask[];
 }
 
 function loadState(): State {
@@ -44,10 +57,11 @@ function loadState(): State {
         overrides: data.overrides || {},
         priorities: data.priorities || {},
         manual: data.manual || [],
+        tasks: data.tasks || [],
       };
     }
   } catch {}
-  return { completed: [], deleted: [], wontdo: [], overrides: {}, priorities: {}, manual: [] };
+  return { completed: [], deleted: [], wontdo: [], overrides: {}, priorities: {}, manual: [], tasks: [] };
 }
 
 function saveState(state: State) {
@@ -151,6 +165,24 @@ export async function GET() {
     });
   }
 
+  // Tasks pushed through the taskstore CLI (e.g. the email brief's follow-ups).
+  // Map the store's free-form source onto the UI's known Source values so they get
+  // the right badge — email tasks show the "Email" badge in the Today view.
+  for (const t of state.tasks) {
+    if (deletedSet.has(t.id)) continue;
+    const uiSource: Source =
+      t.source === "email" ? "email-action" : t.source === "workflow" ? "workflow" : "manual";
+    all.push({
+      id: t.id,
+      text: state.overrides[t.id] ?? t.text,
+      date: t.date,
+      source: uiSource,
+      completed: completedSet.has(t.id),
+      wontdo: wontdoSet.has(t.id),
+      priority: state.priorities[t.id],
+    });
+  }
+
   return Response.json(all);
 }
 
@@ -232,6 +264,9 @@ export async function DELETE(request: Request) {
   const state = loadState();
   if (id.startsWith("manual-")) {
     saveState({ ...state, manual: state.manual.filter((m) => m.id !== id) });
+  } else if (id.startsWith("task-")) {
+    // Stored task: remove the record outright (keeps the tasks array from growing).
+    saveState({ ...state, tasks: state.tasks.filter((t) => t.id !== id) });
   } else {
     const deletedSet = new Set(state.deleted);
     deletedSet.add(id);

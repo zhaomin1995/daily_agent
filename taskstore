@@ -1,0 +1,198 @@
+#!/Library/Frameworks/Python.framework/Versions/3.13/bin/python3
+"""taskstore — the shared task store that lets the daily-agent tools update each other.
+
+Both briefings read and write the same `tasks` array in
+~/morning-brief/.action-items-state.json through this CLI, so a task discovered by
+the email briefing shows up in the workflow briefing's priorities and in the web
+dashboard's Today view (and vice versa). Writes are atomic (temp file + rename)
+and `add` is idempotent (de-dups by source+text) so re-running a brief on the same
+input never creates duplicates.
+
+The state file is shared with the web dashboard. We only ever touch the `tasks`
+array and otherwise preserve every other key (completed/deleted/wontdo/overrides/
+priorities/manual) exactly as written, so completion/priority state set in the
+dashboard keeps working for these tasks too.
+
+Commands:
+  add   --text T --source S [--date YYYY-MM-DD] [--ref R] [--priority high|medium|low]
+  list  [--open] [--source S] [--date YYYY-MM-DD] [--json]
+  done  --id ID
+  rm    --id ID
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+import tempfile
+import datetime
+import secrets
+
+STATE = os.path.expanduser("~/morning-brief/.action-items-state.json")
+
+# Keys we guarantee to exist so the dashboard and briefings can rely on the shape.
+DEFAULTS = {
+    "completed": [],
+    "deleted": [],
+    "wontdo": [],
+    "overrides": {},
+    "priorities": {},
+    "manual": [],
+    "tasks": [],
+}
+
+
+def load():
+    """Load the state file, filling in any missing keys without dropping unknown ones."""
+    data = {}
+    if os.path.exists(STATE):
+        try:
+            with open(STATE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            # Never clobber a partially-written file silently — fail loudly instead.
+            sys.stderr.write(f"taskstore: could not parse {STATE}\n")
+            sys.exit(1)
+    for k, v in DEFAULTS.items():
+        data.setdefault(k, json.loads(json.dumps(v)))
+    return data
+
+
+def save(data):
+    """Atomic write: serialize to a temp file in the same dir, then os.replace()."""
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(STATE), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, STATE)
+    except Exception:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def norm(text):
+    """Normalize text for de-dup: collapse whitespace, lowercase, strip."""
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def today():
+    return datetime.date.today().isoformat()
+
+
+def is_resolved(data, tid):
+    """A task is resolved if completed, won't-do, or deleted."""
+    return tid in set(data["completed"]) or tid in set(data["wontdo"]) or tid in set(data["deleted"])
+
+
+def cmd_add(args):
+    data = load()
+    text = args.text.strip()
+    if not text:
+        sys.stderr.write("taskstore: --text is required and cannot be empty\n")
+        sys.exit(1)
+    source = args.source
+    date = args.date or today()
+
+    # Idempotent: if an *open* task with the same source+text already exists, reuse it.
+    for t in data["tasks"]:
+        if t.get("source") == source and norm(t.get("text", "")) == norm(text) and not is_resolved(data, t["id"]):
+            print(t["id"])
+            return
+
+    tid = f"task-{source}-{date}-{secrets.token_hex(3)}"
+    task = {"id": tid, "text": text, "date": date, "source": source}
+    if args.ref:
+        task["ref"] = args.ref
+    data["tasks"].append(task)
+    if args.priority:
+        data["priorities"][tid] = args.priority
+    save(data)
+    print(tid)
+
+
+def cmd_list(args):
+    data = load()
+    rows = []
+    for t in data["tasks"]:
+        if args.source and t.get("source") != args.source:
+            continue
+        if args.date and t.get("date") != args.date:
+            continue
+        if args.open and is_resolved(data, t["id"]):
+            continue
+        row = dict(t)
+        row["completed"] = t["id"] in set(data["completed"])
+        row["wontdo"] = t["id"] in set(data["wontdo"])
+        row["priority"] = data["priorities"].get(t["id"])
+        rows.append(row)
+
+    if args.json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        return
+    if not rows:
+        return
+    for r in rows:
+        flag = "x" if r["completed"] else ("~" if r["wontdo"] else " ")
+        pri = f" [{r['priority']}]" if r.get("priority") else ""
+        ref = f"  (ref: {r['ref']})" if r.get("ref") else ""
+        print(f"[{flag}] {r['source']}{pri}: {r['text']}{ref}  <{r['id']}>")
+
+
+def cmd_done(args):
+    data = load()
+    if args.id not in [t["id"] for t in data["tasks"]]:
+        sys.stderr.write(f"taskstore: no task with id {args.id}\n")
+        sys.exit(1)
+    if args.id not in data["completed"]:
+        data["completed"].append(args.id)
+    save(data)
+    print(args.id)
+
+
+def cmd_rm(args):
+    data = load()
+    before = len(data["tasks"])
+    data["tasks"] = [t for t in data["tasks"] if t["id"] != args.id]
+    if len(data["tasks"]) == before:
+        sys.stderr.write(f"taskstore: no task with id {args.id}\n")
+        sys.exit(1)
+    save(data)
+    print(args.id)
+
+
+def main():
+    p = argparse.ArgumentParser(prog="taskstore", description=__doc__)
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    a = sub.add_parser("add", help="add a task (idempotent by source+text)")
+    a.add_argument("--text", required=True)
+    a.add_argument("--source", required=True, help="e.g. email, workflow, manual")
+    a.add_argument("--date", help="YYYY-MM-DD (default: today, local)")
+    a.add_argument("--ref", help="back-reference, e.g. 'Sender | Subject'")
+    a.add_argument("--priority", choices=["high", "medium", "low"])
+    a.set_defaults(func=cmd_add)
+
+    l = sub.add_parser("list", help="list tasks")
+    l.add_argument("--open", action="store_true", help="only unresolved tasks")
+    l.add_argument("--source")
+    l.add_argument("--date")
+    l.add_argument("--json", action="store_true")
+    l.set_defaults(func=cmd_list)
+
+    d = sub.add_parser("done", help="mark a task completed")
+    d.add_argument("--id", required=True)
+    d.set_defaults(func=cmd_done)
+
+    r = sub.add_parser("rm", help="delete a task record")
+    r.add_argument("--id", required=True)
+    r.set_defaults(func=cmd_rm)
+
+    args = p.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

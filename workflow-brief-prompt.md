@@ -8,6 +8,8 @@ Read ~/morning-brief/.action-items-state.json if it exists. Parse the `completed
 
 Keep this filtered list in memory — it becomes the base of Today's Priorities in Step 4. Do NOT write a separate "Carried Over" section.
 
+Also run `taskstore list --open --json` to pull tasks injected by the **email briefing** (which runs just before this tool) and any manual/dashboard tasks. This is how email-driven follow-ups reach the workflow priorities. Add each open task to the in-memory list for Step 4; tag email-sourced ones so they are recognizable (e.g. prefix "Email — "). Skip the `task-...` items already covered by a workflow document, and skip any whose `id` is in the resolved sets above.
+
 ## Step 2: Review Workflow Folder (Cached)
 
 Read ~/morning-brief/workflow-cache.md if it exists. For each file in ~/Documents/Workflow:

@@ -113,6 +113,27 @@ Save all Claude Code prompts to ~/morning-brief/{{date}}-action-prompts.md:
 [One line: what they asked.] Draft a reply and save to ~/morning-brief/{{date}}-[sender-shortname].md
 ```
 
+## Step 4b: Push Tasks to the Shared Store
+
+So email-driven follow-ups appear in the **workflow briefing** and the dashboard
+Today view, push one task per Urgent / Action Needed email into the shared task
+store. `taskstore add` is idempotent (de-duped by source + text), so re-running is
+safe and never creates duplicates.
+
+For each Urgent or Action Needed email, run:
+
+```bash
+taskstore add --source email \
+  --text "ONE imperative line — the action, e.g. 'Reply to Brian re COD; remind July 15'" \
+  --ref "SENDER | SUBJECT" \
+  --date {{date}}
+# add --priority high for Urgent emails only
+```
+
+Rules: `--text` is the action to take (not a summary of the email); keep it to one
+line. Use `--priority high` only for Urgent. Do NOT push tasks for FYI, Promotional,
+or Predatory mail.
+
 ## Step 5: Save Email Briefing
 
 Run `mkdir -p ~/morning-brief` first. Estimate read time (word count / 200, rounded up).
