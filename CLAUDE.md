@@ -70,7 +70,8 @@ daily_agent/
 └── web/                        # Next.js 16 dashboard (React 19, Tailwind CSS, TypeScript)
     └── src/
         ├── app/
-        │   ├── page.tsx            # Dashboard — tool cards with run buttons
+        │   ├── page.tsx            # Dashboard — tool cards + today snapshot + action-item summary
+        │   ├── action-items/       # Unified "Today" view — ranked email+workflow+manual items
         │   ├── logs/               # Log viewer — browse split briefings + action items
         │   ├── config/             # Config — tokens and account status
         │   ├── availability/       # Calendar availability generator
@@ -93,8 +94,14 @@ daily_agent/
         │                           #   Sidebar, ConfigPanel, SnapshotPanel, StatsBar, …)
         └── lib/
             ├── tools.ts            # Tool registry (add new tools here)
-            └── paths.ts            # Shared path constants
+            ├── paths.ts            # Shared path constants
+            └── date.ts             # localDate() — YYYY-MM-DD in LOCAL time (see note below)
 ```
+
+> Date handling: always use `localDate()` from `lib/date.ts` to compute "today"
+> for matching brief files. `new Date().toISOString()` returns UTC and rolls the
+> date over in the evening for timezones behind UTC, which previously made the
+> snapshot/today views look empty at night.
 
 > The dashboard is more built-out than this tree implies (logs viewer with
 > interactive action-item state, calendar availability, search, submissions,

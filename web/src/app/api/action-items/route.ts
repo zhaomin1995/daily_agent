@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { BRIEFING_DIR, ACTION_ITEMS_STATE } from "@/lib/paths";
+import { localDate } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -183,7 +184,7 @@ export async function POST(request: Request) {
   if (!text?.trim()) return Response.json({ error: "text required" }, { status: 400 });
   const state = loadState();
   const id = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const date = new Date().toISOString().split("T")[0];
+  const date = localDate();
   saveState({ ...state, manual: [...state.manual, { id, text: text.trim(), date }] });
   return Response.json({ id, text: text.trim(), date, completed: false, wontdo: false, source: "manual" });
 }

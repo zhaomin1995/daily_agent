@@ -6,6 +6,7 @@ import SkeletonCard from "@/components/Skeleton";
 import PullToRefresh from "@/components/PullToRefresh";
 import StatsBar from "@/components/StatsBar";
 import SnapshotPanel from "@/components/SnapshotPanel";
+import ActionItems from "@/components/ActionItems";
 
 interface Tool {
   id: string;
@@ -101,6 +102,7 @@ export default function Dashboard() {
         )}
 
         <SnapshotPanel />
+        <ActionItems />
 
         {!loading && tools.length > 0 && (
           <div className="mb-4">

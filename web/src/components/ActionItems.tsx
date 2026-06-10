@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { localDate } from "@/lib/date";
 
 type Priority = "high" | "medium" | "low";
 type Source = "workflow" | "email-urgent" | "email-action" | "manual";
@@ -34,7 +35,7 @@ export default function ActionItems() {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDate();
 
   const refresh = () => {
     fetch("/api/action-items")

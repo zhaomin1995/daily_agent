@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { BRIEFING_DIR, DEADLINES_FILE, ACTION_ITEMS_STATE } from "@/lib/paths";
+import { localDate } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +64,7 @@ export async function GET() {
     return Response.json({ urgent: 0, actionNeeded: 0, priorities: 0, nearestDeadline: null });
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDate();
   const emailFile = path.join(BRIEFING_DIR, `${today}-email.md`);
   const workflowFile = path.join(BRIEFING_DIR, `${today}-workflow.md`);
 
