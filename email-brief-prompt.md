@@ -38,6 +38,14 @@ tell application "Mail"
             end if
             set emailData to emailData & "ACCOUNT: " & acctName & " (" & acctEmail & ")" & return
             set emailData to emailData & "MSG_INDEX: " & i & return
+            -- Capture the stable RFC Message-ID so Pass 2 can re-fetch by identity,
+            -- not by position (positions shift if new mail arrives between passes).
+            try
+                set msgId to message id of msg
+            on error
+                set msgId to ""
+            end try
+            set emailData to emailData & "MESSAGE_ID: " & msgId & return
             set emailData to emailData & "FROM: " & (sender of msg as string) & return
             set emailData to emailData & "FROM_ADDR: " & (address of sender of msg) & return
             set emailData to emailData & "SUBJECT: " & subject of msg & return
@@ -67,23 +75,27 @@ EOF
 - **Action Needed**: Requires reply or decision, not urgent
 - **FYI**: Informational only — subject line only
 
-Record MSG_INDEX for Urgent and Action Needed emails only.
+Record MESSAGE_ID (and MSG_INDEX as a fallback) for Urgent and Action Needed emails only.
 
 ## Step 4 — Pass 2: Full Body + Draft for Urgent + Action Needed
 
-For each Urgent or Action Needed email, fetch the full body:
+For each Urgent or Action Needed email, fetch the full body by its stable MESSAGE_ID —
+not by position, since mail arriving between Pass 1 and Pass 2 would shift positional
+indexes and make you draft against the wrong message:
 
 ```bash
 osascript << 'EOF'
 tell application "Mail"
     set acct to first account whose name is "ACCOUNT_NAME"
-    set cutoff to (current date) - (1 * days)
-    set allUnread to (messages of mailbox "Inbox" of acct whose read status is false and date received > cutoff)
-    set msg to item MSG_INDEX of allUnread
-    return content of msg
+    set theMsg to first message of mailbox "Inbox" of acct whose message id is "MESSAGE_ID_HERE"
+    return content of theMsg
 end tell
 EOF
 ```
+
+If MESSAGE_ID is empty (rare — the header was missing), fall back to the positional form:
+re-fetch `(messages of mailbox "Inbox" of acct whose read status is false and date received > cutoff)`
+with `cutoff` set to `(current date) - (1 * days)`, then take `item MSG_INDEX`.
 
 For each email:
 1. Extract the full request, deadline, and context
