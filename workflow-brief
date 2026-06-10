@@ -1,6 +1,14 @@
 #!/bin/zsh
+# Workflow-folder summary tool. Substitutes today's dates into the prompt
+# template and runs it through `claude -p`. Pipe-form stdin avoids
+# arg-length/quoting limits; tools and model are pinned so unattended (launchd)
+# runs never block on a permission prompt and stay reproducible.
 TODAY=$(date +%Y-%m-%d)
 YESTERDAY=$(date -v-1d +%Y-%m-%d)
+
 PROMPT=$(sed "s/{{date}}/$TODAY/g; s/{{yesterday}}/$YESTERDAY/g" ~/.claude/workflow-brief-prompt.md)
-claude -p "$PROMPT" --allowedTools "Bash,Read,Write" --model claude-sonnet-4-6
-osascript -e "display notification \"Workflow summary ready. Check ~/morning-brief/$TODAY-workflow.md\" with title \"Workflow Summary\" sound name \"Glass\""
+
+echo "$PROMPT" | claude -p --allowedTools "Bash,Read,Write" --model claude-sonnet-4-6
+
+# Desktop notification so a manual or scheduled run announces completion.
+osascript -e "display notification \"Workflow summary ready: ~/morning-brief/$TODAY-workflow.md\" with title \"Workflow Summary\" sound name \"Glass\""
