@@ -30,6 +30,31 @@ A workflow-folder digest that:
 
 > Note: `~/Documents/Workflow` is a GTD staging area of **symlinks** to canonical files in `~/Documents/Research` and `~/Documents/Career`. See `~/Documents/Workflow/CLAUDE.md`.
 
+## Running it day to day
+
+Four ways to use the agent, from hands-off to working on it directly:
+
+1. **It runs itself.** launchd runs `morning` at **8:00 AM Mon–Fri** (email brief + workflow
+   brief), writing to `~/morning-brief/`. Just read the output. Check a run with the dated
+   log at `~/morning-brief/logs/{date}.log`.
+   - Run on demand: `morning`
+   - Trigger the scheduled job now: `launchctl kickstart -k gui/$(id -u)/com.lantingyang.morning`
+
+2. **See it in the dashboard.** `cd web && npm run dev`, then http://localhost:3000 (Today =
+   to-dos, Logs = past briefings). Stop with `pkill -f "next dev"`.
+
+3. **Act on the day with Claude Code.** The email brief writes ready-to-paste prompts to
+   `~/morning-brief/{date}-action-prompts.md`. Run `claude` inside this repo (so it loads this
+   file), paste a prompt, and it drafts the reply / updates tasks. Or just ask "what's on my
+   plate today" and it reads the briefs.
+
+4. **Change or extend the agent.** Same — run `claude` in this repo and describe the change
+   (new tool, prompt tweak, dashboard edit). See `web/DESIGN_PLAN.md` for the UX direction.
+
+> First-run caveat: the scheduled job drives Apple Mail via AppleScript, so the first run
+> needs macOS **Automation** permission. If a `*-email.md` ever comes out empty, run `morning`
+> once in the terminal and approve the Mail prompt.
+
 ## Email Draft Assistant
 
 An interactive tool (`/email-draft` page + `/api/email-draft` route) for composing a new
