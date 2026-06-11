@@ -51,6 +51,12 @@ Four ways to use the agent, from hands-off to working on it directly:
 4. **Change or extend the agent.** Same — run `claude` in this repo and describe the change
    (new tool, prompt tweak, dashboard edit). See `web/DESIGN_PLAN.md` for the UX direction.
 
+5. **Log end-of-day progress.** In any `claude` session, run `/log-progress <what you did and
+   what's next>`. It updates the matching `~/Documents/Workflow/pipeline.md` rows (Status +
+   Next action), plus deadlines and status files where relevant, so the next morning's brief is
+   accurate. `pipeline.md` is the source of truth the workflow brief reads; keep it current.
+   Defined in `commands/log-progress.md` (symlinked to `~/.claude/commands/`).
+
 > First-run caveat: the scheduled job drives Apple Mail via AppleScript, so the first run
 > needs macOS **Automation** permission. If a `*-email.md` ever comes out empty, run `morning`
 > once in the terminal and approve the Mail prompt.
@@ -148,6 +154,7 @@ and vice versa (no copy/deploy step that can drift):
 | `email-brief-prompt.md` | `~/.claude/email-brief-prompt.md` |
 | `workflow-brief-prompt.md` | `~/.claude/workflow-brief-prompt.md` |
 | `taskstore` | `~/.local/bin/taskstore` |
+| `commands/log-progress.md` | `~/.claude/commands/log-progress.md` |
 
 Scheduling: `~/Library/LaunchAgents/com.lantingyang.morning.plist` runs `morning` at
 8:00 AM Mon–Fri. Run logs go to `~/morning-brief/logs/`. Manage with:
