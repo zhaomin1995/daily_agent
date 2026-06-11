@@ -24,7 +24,7 @@ An automated email triage that:
 A workflow-folder digest that:
 
 1. Loads yesterday's open priorities from `~/morning-brief/{yesterday}-workflow.md`, filtering out items marked completed/wontdo/deleted in `~/morning-brief/.action-items-state.json`
-2. Reviews files in `~/Documents/Workflow` using a modification-time cache (`~/morning-brief/workflow-cache.md`) so unchanged files are not re-read
+2. Reads `~/Documents/Workflow/pipeline.md` (the one-line-per-item index) plus any per-project `STATUS.md`/`*_status.md` files — not full manuscripts — to keep token use low; only opens a document as a rare fallback when an item has no pipeline row or status file
 3. Extracts deadlines into `~/morning-brief/deadlines.md`
 4. Saves a single ranked priority list to `~/morning-brief/{date}-workflow.md`
 
