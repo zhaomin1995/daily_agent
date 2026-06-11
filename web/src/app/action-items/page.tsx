@@ -166,8 +166,8 @@ export default function ActionItemsPage() {
     <div className="p-4 sm:p-8 max-w-3xl">
       <div className="flex items-end justify-between flex-wrap gap-2">
         <div>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight"><span className="text-gradient-brand">Today</span></h1>
-          <p className="text-sm text-zinc-500 mt-1">{prettyDate}</p>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight"><span className="text-gradient-brand">Today</span></h1>
+          <p className="text-sm text-zinc-500 mt-0.5">{prettyDate}</p>
         </div>
         {summary?.nearestDeadline && (
           <span className="text-xs text-amber-600 dark:text-amber-400 font-medium border border-amber-200 dark:border-amber-900/40 rounded-full px-2.5 py-1">

@@ -514,292 +514,10 @@ function EmailDraftCards({ content }: { content: string }) {
   );
 }
 
-// Workflow priorities with live completion state — replaces the standalone Action Items page
-interface ActionItem {
-  id: string;
-  text: string;
-  date: string;
-  completed: boolean;
-  wontdo: boolean;
-  source: string;
-  priority?: string;
-}
-
-// date optional: if omitted, shows all items across all dates (global view)
-function WorkflowPrioritiesView({ date }: { date?: string }) {
-  const [allItems, setAllItems] = useState<ActionItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newText, setNewText] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [undoLabel, setUndoLabel] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editText, setEditText] = useState("");
-  const [doneOpen, setDoneOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const editRef = useRef<HTMLTextAreaElement>(null);
-  const pendingUndoRef = useRef<{ restore: () => void; commit: () => void } | null>(null);
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    fetch("/api/action-items")
-      .then((r) => r.json())
-      .then((data: ActionItem[]) => {
-        const relevant = (data as ActionItem[]).filter((i) =>
-          (i.source === "workflow" || i.source === "manual") &&
-          (date ? i.date === date : true)
-        );
-        // Sort by date descending, preserving original order within a day
-        setAllItems(relevant.sort((a, b) => b.date.localeCompare(a.date)));
-        setLoading(false);
-      });
-  }, [date]);
-
-  function scheduleUndo(label: string, restore: () => void, commit: () => void) {
-    if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); pendingUndoRef.current?.commit(); }
-    pendingUndoRef.current = { restore, commit };
-    setUndoLabel(label);
-    undoTimerRef.current = setTimeout(() => { pendingUndoRef.current?.commit(); pendingUndoRef.current = null; setUndoLabel(null); }, 3500);
-  }
-
-  function handleUndo() {
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    pendingUndoRef.current?.restore();
-    pendingUndoRef.current = null;
-    setUndoLabel(null);
-  }
-
-  async function toggle(id: string, completed: boolean) {
-    setAllItems((prev) => prev.map((i) => i.id === id ? { ...i, completed } : i));
-    await fetch("/api/action-items", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, completed }),
-    });
-  }
-
-  function markWontdo(id: string) {
-    const item = allItems.find((i) => i.id === id);
-    if (!item) return;
-    setAllItems((prev) => prev.map((i) => i.id === id ? { ...i, wontdo: true } : i));
-    scheduleUndo("Won't do",
-      () => setAllItems((prev) => prev.map((i) => i.id === id ? { ...i, wontdo: false } : i)),
-      () => fetch("/api/action-items", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, wontdo: true }) })
-    );
-  }
-
-  function deleteItem(id: string) {
-    const item = allItems.find((i) => i.id === id);
-    if (!item) return;
-    setAllItems((prev) => prev.filter((i) => i.id !== id));
-    scheduleUndo("Item deleted",
-      () => setAllItems((prev) => [...prev, item]),
-      () => fetch("/api/action-items", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })
-    );
-  }
-
-  async function addItem() {
-    const text = newText.trim();
-    if (!text) return;
-    setAdding(true);
-    setNewText("");
-    const res = await fetch("/api/action-items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    const item = await res.json();
-    setAllItems((prev) => [...prev, item]);
-    setAdding(false);
-    inputRef.current?.focus();
-  }
-
-  useEffect(() => {
-    if (editingId !== null) editRef.current?.focus();
-  }, [editingId]);
-
-  function startEdit(item: ActionItem) {
-    setEditingId(item.id);
-    setEditText(item.text);
-  }
-
-  async function saveEdit(id: string) {
-    const text = editText.trim();
-    if (!text) return;
-    setAllItems((prev) => prev.map((i) => i.id === id ? { ...i, text } : i));
-    setEditingId(null);
-    await fetch("/api/action-items", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, text }),
-    });
-  }
-
-  if (loading) return <p className="text-sm text-zinc-400 py-4">Loading priorities...</p>;
-
-  const openItems = allItems.filter((i) => !i.completed && !i.wontdo);
-  const doneItems = allItems.filter((i) => i.completed || i.wontdo);
-  const doneCount = allItems.filter((i) => i.completed).length;
-  const activeCount = allItems.filter((i) => !i.wontdo).length;
-  const pct = activeCount > 0 ? Math.round((doneCount / activeCount) * 100) : 0;
-
-  function ItemDateBadge({ item }: { item: ActionItem }) {
-    if (date) return null;
-    return (
-      <span className="text-[10px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full font-mono shrink-0">
-        {new Date(item.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-      </span>
-    );
-  }
-
-  return (
-    <div className="relative space-y-5">
-      {/* Progress summary */}
-      {activeCount > 0 && (
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-            <div className="h-full bg-zinc-900 dark:bg-zinc-100 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-          </div>
-          <span className="text-xs text-zinc-400 shrink-0 font-medium">{doneCount} / {activeCount} done</span>
-        </div>
-      )}
-
-      {/* Open tasks */}
-      <div>
-        <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-          Open {openItems.length > 0 && `(${openItems.length})`}
-        </p>
-        {openItems.length === 0 ? (
-          <p className="text-sm text-zinc-400 py-2">All tasks complete.</p>
-        ) : (
-          <ul className="space-y-2">
-            {openItems.map((item) => (
-              <li key={item.id} className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                {editingId === item.id ? (
-                  <div className="space-y-2">
-                    <textarea
-                      ref={editRef}
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(item.id); } if (e.key === "Escape") setEditingId(null); }}
-                      rows={Math.max(2, editText.split("\n").length)}
-                      className="w-full px-2 py-1.5 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 ring-zinc-400 resize-none leading-relaxed"
-                    />
-                    <div className="flex gap-2">
-                      <button onClick={() => saveEdit(item.id)} className="px-3 py-1 text-xs font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90 transition-opacity">Save</button>
-                      <button onClick={() => setEditingId(null)} className="px-3 py-1 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-800">Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-start gap-2.5">
-                      <button
-                        onClick={() => toggle(item.id, true)}
-                        className="mt-0.5 shrink-0 w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 hover:border-zinc-500 transition-colors"
-                      />
-                      <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">{item.text}</span>
-                      <ItemDateBadge item={item} />
-                    </div>
-                    {/* Always-visible action row */}
-                    <div className="flex items-center gap-1 mt-2 ml-6">
-                      <button onClick={() => startEdit(item)} className="text-xs px-2 py-0.5 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">Edit</button>
-                      <span className="text-zinc-300 dark:text-zinc-700">·</span>
-                      <button onClick={() => markWontdo(item.id)} className="text-xs px-2 py-0.5 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">Won&apos;t do</button>
-                      <span className="text-zinc-300 dark:text-zinc-700">·</span>
-                      <button onClick={() => deleteItem(item.id)} className="text-xs px-2 py-0.5 rounded text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors">Delete</button>
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Add new task */}
-      <div className="flex gap-2">
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder="Add a task…"
-          value={newText}
-          onChange={(e) => setNewText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addItem()}
-          className="flex-1 px-3 py-1.5 text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 ring-accent placeholder:text-zinc-400"
-        />
-        <button
-          onClick={addItem}
-          disabled={!newText.trim() || adding}
-          className="px-3 py-1.5 text-sm font-medium rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:opacity-90 disabled:opacity-40 transition-opacity"
-        >
-          Add
-        </button>
-      </div>
-
-      {/* Done / Won't do — collapsible */}
-      {doneItems.length > 0 && (
-        <div>
-          <button
-            onClick={() => setDoneOpen((o) => !o)}
-            className="flex items-center gap-1.5 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors mb-2"
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${doneOpen ? "rotate-90" : ""}`}>
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-            Done &amp; Skipped ({doneItems.length})
-          </button>
-          {doneOpen && (
-            <ul className="space-y-1.5">
-              {doneItems.map((item) => (
-                <li key={item.id} className="flex items-start gap-2.5 px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-900/50">
-                  {item.completed ? (
-                    <button
-                      onClick={() => toggle(item.id, false)}
-                      className="mt-0.5 shrink-0 w-4 h-4 rounded border bg-zinc-900 border-zinc-900 dark:bg-zinc-100 dark:border-zinc-100 flex items-center justify-center"
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="dark:stroke-zinc-900">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <span className="mt-0.5 shrink-0 w-4 h-4 rounded-full border border-zinc-300 dark:border-zinc-600 flex items-center justify-center">
-                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-400">
-                        <circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-                      </svg>
-                    </span>
-                  )}
-                  <span className={`flex-1 text-sm leading-relaxed ${item.completed ? "line-through text-zinc-400 dark:text-zinc-600" : "line-through text-zinc-400 italic"}`}>
-                    {item.text}
-                  </span>
-                  <ItemDateBadge item={item} />
-                  <button onClick={() => deleteItem(item.id)} title="Delete" className="shrink-0 p-1 rounded text-zinc-300 hover:text-red-400 dark:text-zinc-700 dark:hover:text-red-400 transition-colors">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
-                    </svg>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {/* Undo toast */}
-      {undoLabel && (
-        <div className="absolute bottom-0 left-0 right-0 flex justify-center pointer-events-none">
-          <div className="pointer-events-auto flex items-center gap-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-medium px-3 py-2 rounded-xl shadow-lg">
-            <span>{undoLabel}</span>
-            <button onClick={handleUndo} className="px-2 py-0.5 rounded-md bg-white/20 dark:bg-zinc-900/20 hover:bg-white/30 transition-colors text-xs font-semibold">Undo</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function LogViewer() {
   const [logs, setLogs] = useState<GroupedLogs[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"email" | "workflow" | "priorities">("priorities");
+  const [activeTab, setActiveTab] = useState<"email" | "workflow">("email");
   const [content, setContent] = useState<string>("");
   const [actionPrompts, setActionPrompts] = useState<string>("");
   const [contentView, setContentView] = useState<"brief" | "prompts" | "drafts">("brief");
@@ -818,6 +536,14 @@ export default function LogViewer() {
   }, []);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
+
+  // Land on the most recent briefing instead of an empty state.
+  useEffect(() => {
+    if (selectedDate || logs.length === 0) return;
+    const newest = logs[0];
+    selectDate(newest.date, newest.workflow ? "workflow" : "email");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logs]);
 
   // Auto-refresh every 30s to surface new briefings (#7)
   useEffect(() => {
@@ -862,9 +588,9 @@ export default function LogViewer() {
     loadContent(date, tab);
   }
 
-  function switchTab(tab: "email" | "workflow" | "priorities") {
+  function switchTab(tab: "email" | "workflow") {
     setActiveTab(tab);
-    if (tab !== "priorities" && selectedDate) loadContent(selectedDate, tab as "email" | "workflow");
+    if (selectedDate) loadContent(selectedDate, tab);
   }
 
   // Open current briefing file in the default editor (#8)
@@ -910,7 +636,7 @@ export default function LogViewer() {
 
   if (loading) return <p className="text-sm text-zinc-500">Loading logs...</p>;
 
-  if (logs.length === 0 && activeTab !== "priorities") {
+  if (logs.length === 0) {
     return (
       <div className="text-center py-16">
         <p className="text-zinc-400 dark:text-zinc-500 text-sm">
@@ -935,7 +661,7 @@ export default function LogViewer() {
   return (
     <div className="flex flex-col md:flex-row gap-0 h-full">
       {/* Left panel: search + date list (hidden when Priorities tab active on mobile) */}
-      <div className={`md:w-52 shrink-0 md:border-r border-zinc-200 dark:border-zinc-800 md:pr-5 ${activeTab === "priorities" ? "hidden md:block" : ""}`}>
+      <div className="md:w-52 shrink-0 md:border-r border-zinc-200 dark:border-zinc-800 md:pr-5">
         {/* Search */}
         <div className="relative mb-4">
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1057,15 +783,15 @@ export default function LogViewer() {
       {/* Content area */}
       <div className="flex-1 min-w-0 md:pl-6">
         <div className="flex flex-col h-full">
-          {/* Date header — only for Email/Workflow tabs when a date is selected */}
-          {activeTab !== "priorities" && selectedDate && selected && (
+          {/* Date header — shown when a date is selected */}
+          {selectedDate && selected && (
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{formatLogDate(selectedDate)}</h2>
               <p className="text-xs text-zinc-400 mt-0.5">{formatLogDateFull(selectedDate)}</p>
             </div>
           )}
 
-          {/* Primary tabs: Email / Workflow / Priorities — always visible */}
+          {/* Tabs: Email / Workflow */}
           <div className="flex items-end border-b border-zinc-200 dark:border-zinc-800 mb-0">
             {selectedDate && selected?.email && (
               <button
@@ -1091,18 +817,8 @@ export default function LogViewer() {
                 Workflow
               </button>
             )}
-            <button
-              onClick={() => switchTab("priorities")}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                activeTab === "priorities"
-                  ? "border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100"
-                  : "border-transparent text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
-              }`}
-            >
-              Priorities
-            </button>
-            {/* Open in editor — only for Email/Workflow tabs */}
-            {activeTab !== "priorities" && selectedDate && (
+            {/* Open in editor */}
+            {selectedDate && (
               <button
                 onClick={openInEditor}
                 title="Open file in editor"
@@ -1118,12 +834,7 @@ export default function LogViewer() {
             )}
           </div>
 
-          {/* Priorities tab: global view across all dates */}
-          {activeTab === "priorities" ? (
-            <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 md:p-6 overflow-auto max-h-[55vh] md:max-h-[70vh] mt-4">
-              <WorkflowPrioritiesView />
-            </div>
-          ) : selectedDate && selected ? (
+          {selectedDate && selected ? (
             <>
               {/* Secondary sub-view pills for Email/Workflow */}
               {subViews.length > 1 && (

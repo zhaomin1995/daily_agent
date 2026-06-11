@@ -123,34 +123,39 @@ export async function GET() {
   const all: ActionItem[] = [];
 
   if (fs.existsSync(BRIEFING_DIR)) {
-    const dates = [...new Set(
-      fs.readdirSync(BRIEFING_DIR)
-        .filter((f) => f.endsWith("-workflow.md") || f.endsWith("-email.md"))
-        .map((f) => f.replace(/-workflow\.md|-email\.md/, ""))
-    )].sort().reverse().slice(0, 7);
+    // The latest brief of each kind is the current snapshot. The workflow brief
+    // carries forward every still-open item each day, and email follow-ups that span
+    // days live in the durable `tasks` array — so aggregating older briefs would only
+    // re-surface stale, superseded versions of the same items (e.g. "revise v3"
+    // lingering after it became "awaiting v5 edits", or weeks-old handled emails).
+    const files = fs.readdirSync(BRIEFING_DIR);
+    const latestDate = (suffix: string) =>
+      files
+        .filter((f) => f.endsWith(suffix))
+        .map((f) => f.replace(suffix, ""))
+        .sort()
+        .reverse()[0];
 
-    for (const date of dates) {
-      const workflowFile = path.join(BRIEFING_DIR, `${date}-workflow.md`);
-      const emailFile = path.join(BRIEFING_DIR, `${date}-email.md`);
-      const extracted: { id: string; text: string; date: string; source: Source }[] = [];
+    const extracted: { id: string; text: string; date: string; source: Source }[] = [];
 
-      if (fs.existsSync(workflowFile)) {
-        extracted.push(...extractWorkflowItems(fs.readFileSync(workflowFile, "utf-8"), date));
-      }
-      if (fs.existsSync(emailFile)) {
-        extracted.push(...extractEmailItems(fs.readFileSync(emailFile, "utf-8"), date));
-      }
+    const wfDate = latestDate("-workflow.md");
+    if (wfDate) {
+      extracted.push(...extractWorkflowItems(fs.readFileSync(path.join(BRIEFING_DIR, `${wfDate}-workflow.md`), "utf-8"), wfDate));
+    }
+    const emDate = latestDate("-email.md");
+    if (emDate) {
+      extracted.push(...extractEmailItems(fs.readFileSync(path.join(BRIEFING_DIR, `${emDate}-email.md`), "utf-8"), emDate));
+    }
 
-      for (const item of extracted) {
-        if (deletedSet.has(item.id)) continue;
-        all.push({
-          ...item,
-          text: state.overrides[item.id] ?? item.text,
-          completed: completedSet.has(item.id),
-          wontdo: wontdoSet.has(item.id),
-          priority: state.priorities[item.id],
-        });
-      }
+    for (const item of extracted) {
+      if (deletedSet.has(item.id)) continue;
+      all.push({
+        ...item,
+        text: state.overrides[item.id] ?? item.text,
+        completed: completedSet.has(item.id),
+        wontdo: wontdoSet.has(item.id),
+        priority: state.priorities[item.id],
+      });
     }
   }
 

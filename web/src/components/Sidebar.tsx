@@ -22,12 +22,12 @@ const navGroups: NavGroup[] = [
   {
     items: [
       { href: "/", label: "Dashboard", icon: "grid" },
+      { href: "/action-items", label: "Today", icon: "check-square" },
     ],
   },
   {
     label: "Daily",
     items: [
-      { href: "/action-items", label: "Today", icon: "check-square" },
       { href: "/logs", label: "Logs", icon: "file-text" },
       { href: "/availability", label: "Availability", icon: "calendar" },
       { href: "/email-draft", label: "Email Draft", icon: "mail" },
